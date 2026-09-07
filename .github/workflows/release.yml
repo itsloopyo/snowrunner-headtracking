@@ -1,0 +1,29 @@
+name: Release
+run-name: "Release ${{ github.ref_name }}"
+
+# Everything this release does lives in cameraunlock-core's release-mod.yml.
+# Only the values below are this mod's. Pinned to a commit SHA, never a branch:
+# that workflow runs with contents:write, the Discord webhook and the Lopari PAT.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    uses: itsloopyo/cameraunlock-core/.github/workflows/release-mod.yml@435915a8a3d8e1b799cc169b74f1fcf72b9534e7
+    with:
+      project-name: 'SnowRunner Head Tracking'
+      version-source: pixi
+      version-path: 'pixi.toml'
+      # Everything whose change can reach a user. Narrower than this and a
+      # release with no commit touching the list aborts note generation -
+      # after the tag is already pushed. A vendored loader bump (vendor/), a
+      # packaging change (scripts/), a build change (CMakeLists.txt) and a
+      # manifest change all qualify and were all missing.
+      artifact-paths: 'src/ cameraunlock-core/ scripts/ vendor/ CMakeLists.txt launcher-manifest.json pixi.toml'
+      setup-msbuild: true
+    permissions:
+      contents: write
+    secrets: inherit

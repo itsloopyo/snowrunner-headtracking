@@ -1,0 +1,60 @@
+[workspace]
+name = "snowrunner-headtracking"
+version = "0.0.0"
+description = "Head tracking mod for SnowRunner (Saber3D engine)"
+license = "MIT"
+license-file = "LICENSE"
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[tasks]
+sync = "git submodule update --remote cameraunlock-core"
+
+# No -G: let CMake auto-detect the installed Visual Studio generator. Pinning
+# a version breaks whenever a runner image moves to a newer VS.
+# Guarded on the CACHE, not the directory. `cmake -B build` creates the
+# directory before it can fail, so a configure that died (a missing submodule, a
+# broken toolchain) left a build/ with no project in it - and every later
+# `pixi run build` then skipped configure and failed with "could not load cache",
+# with nothing pointing at `pixi run clean` as the fix.
+setup = { cmd = """
+    powershell -Command "if (-not (Test-Path 'build/CMakeCache.txt')) { cmake -B build -A x64 } else { Write-Host 'Build already configured, skipping setup' -ForegroundColor Yellow }"
+""" }
+
+build = { cmd = "cmake --build build --config Release", depends-on = ["setup"] }
+build-debug = { cmd = "cmake --build build --config Debug", depends-on = ["setup"] }
+
+clean = { cmd = """
+    powershell -Command "if (Test-Path 'build') { Remove-Item 'build' -Recurse -Force }; Write-Host 'Build artifacts cleaned' -ForegroundColor Green"
+""" }
+
+clean-all = { cmd = """
+    powershell -Command "foreach ($d in @('build','build-tests','release')) { if (Test-Path $d) { Remove-Item $d -Recurse -Force } }; Write-Host 'All build artifacts cleaned' -ForegroundColor Green"
+""" }
+
+# Unit tests: the HeadTracking.ini boundary, the shipped defaults, the camera
+# transform composition, the aim projection and the gameplay gate. Builds in
+# build-tests/ so the packaged build/ tree never contains a test binary.
+test = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/run-tests.ps1" }
+
+# Bump the vendored Ultimate ASI Loader copy. Manual; commit the result.
+update-deps = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/update-deps.ps1" }
+
+package = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["build"] }
+
+# Dev loop: build, then copy the .asi + vendored loader straight into the
+# detected game folder. install.cmd is the end-user path and is not run here -
+# it pauses when it isn't given /y, and pixi allocates no stdin to read from.
+install = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1", depends-on = ["build"] }
+
+uninstall = "scripts/uninstall.cmd /y"
+
+release = "powershell -ExecutionPolicy Bypass -File scripts/release.ps1"
+
+# Compare the installed SnowRunner.exe PE fingerprint against every build
+# profile in src/builds/. First thing to run when a user reports the dormant
+# "unknown build" log line.
+check-fingerprint = "powershell -ExecutionPolicy Bypass -File scripts/check-fingerprint.ps1"
+
+[dependencies]
+# No pixi-managed deps - relies on system CMake + Visual Studio.
