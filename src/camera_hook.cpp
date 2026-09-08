@@ -12,6 +12,7 @@
 #include <mutex>
 
 #include "builds/build_registry.h"
+#include "camera_fov.h"
 #include "camera_transform.h"
 #include "headtracking_mod.h"
 #include "logging.h"
@@ -49,6 +50,10 @@ std::atomic<unsigned long long> g_last_drive_camera_tick{0};
 std::atomic<bool> g_logged_drive_camera_activity{false};
 constexpr unsigned long long kVehicleCameraActivityMs = 100;
 
+// The INI's FovScale. Written once by InstallCameraHook before the first detour
+// exists, so the render threads that read it can never see a half-built value.
+float g_fov_scale = 1.0f;
+
 std::mutex g_pose_mutex;
 HeadPose g_render_pose;
 bool g_have_render_pose = false;
@@ -67,7 +72,14 @@ bool VehicleCameraIsActive() {
     return last != 0 && GetTickCount64() - last <= kVehicleCameraActivityMs;
 }
 
-bool PoseForPlayerCamera(std::uintptr_t caller, HeadPose& pose, bool& world_yaw) {
+// This frame's head pose, and whether the camera has to be composed at all.
+//
+// A frame with no pose still composes while FovScale is set: the field of view
+// is a rendering setting rather than head tracking, so it survives the toggle
+// hotkey, a tracker that has stopped sending and the co-op gate - all three of
+// which only decide whether a pose exists. Both stop at the same place, a frame
+// no vehicle camera has drawn for 100ms, which is a menu or a loading screen.
+bool ShouldComposeCamera(std::uintptr_t caller, HeadPose& pose, bool& world_yaw) {
     std::lock_guard<std::mutex> lock(g_pose_mutex);
     if (!VehicleCameraIsActive()) {
         g_have_render_pose = false;
@@ -78,10 +90,33 @@ bool PoseForPlayerCamera(std::uintptr_t caller, HeadPose& pose, bool& world_yaw)
         g_have_render_pose = PoseForThisFrame(g_render_pose);
         g_render_world_yaw = WorldYawEnabled();
     }
-    if (!g_have_render_pose) return false;
+    if (!g_have_render_pose) return g_fov_scale != 1.0f;
     pose = g_render_pose;
     world_yaw = g_render_world_yaw;
     return true;
+}
+
+// Once, on the first projection FovScale is applied to. A scale is a number the
+// player typed, so what it is worth knowing is what it did to the angles the
+// game asked for - the same pair SnowRunner's own Field of View settings move.
+void LogFieldOfViewOnce(const float* projection) {
+    static bool logged = false;
+    if (logged || g_fov_scale == 1.0f) return;
+    logged = true;
+
+    if (!IsReportableProjection(projection)) {
+        Log::Line("[camera] FovScale %.2f is set, but the projection at +0x%X does not read as "
+                  "a perspective one (%.4f, %.4f) - please report this with your game version",
+                  g_fov_scale, g_projection_offset, projection[kProjectionHorizontal],
+                  projection[kProjectionVertical]);
+        return;
+    }
+    Log::Line("[camera] FovScale %.2f: horizontal %.1f -> %.1f degrees, vertical %.1f -> %.1f",
+              g_fov_scale,
+              ProjectionFovDegrees(projection[kProjectionHorizontal], 1.0f),
+              ProjectionFovDegrees(projection[kProjectionHorizontal], g_fov_scale),
+              ProjectionFovDegrees(projection[kProjectionVertical], 1.0f),
+              ProjectionFovDegrees(projection[kProjectionVertical], g_fov_scale));
 }
 
 void ComposeRenderCamera(std::uint8_t* bytes, const HeadPose& pose, bool world_yaw) {
@@ -93,7 +128,9 @@ void ComposeRenderCamera(std::uint8_t* bytes, const HeadPose& pose, bool world_y
     std::int32_t inverse_marker;
     std::memcpy(&inverse_marker, inverse, sizeof(inverse_marker));
     if (inverse_marker == -1) g_matrix_inverse(inverse, 0, view);
-    ApplyHeadPoseToRenderCamera(view, eye, projection, view_projection, pose, world_yaw);
+    LogFieldOfViewOnce(projection);
+    ApplyHeadPoseToRenderCamera(view, eye, projection, view_projection, pose, world_yaw,
+                                g_fov_scale);
     g_matrix_inverse(inverse, 0, view);
 }
 
@@ -103,8 +140,8 @@ void* __fastcall CameraFrustumDetour(void* camera, void* output, float far_plane
         return g_original_camera_frustum(camera, output, far_plane);
     }
     HeadPose pose;
-    bool world_yaw;
-    if (!PoseForPlayerCamera(caller, pose, world_yaw)) {
+    bool world_yaw = false;
+    if (!ShouldComposeCamera(caller, pose, world_yaw)) {
         return g_original_camera_frustum(camera, output, far_plane);
     }
 
@@ -123,8 +160,8 @@ void __fastcall RenderCameraUploadDetour(void* camera_data, void* context,
     }
 
     HeadPose pose;
-    bool world_yaw;
-    if (!PoseForPlayerCamera(caller, pose, world_yaw)) {
+    bool world_yaw = false;
+    if (!ShouldComposeCamera(caller, pose, world_yaw)) {
         g_original_render_camera_upload(camera_data, context, bindings, pass);
         return;
     }
@@ -145,10 +182,11 @@ bool Failed(cameraunlock::hooks::HookStatus status, const char* what) {
 
 }  // namespace
 
-bool InstallCameraHook() {
+bool InstallCameraHook(float fov_scale) {
     using cameraunlock::hooks::HookManager;
     using cameraunlock::hooks::HookStatus;
 
+    g_fov_scale = fov_scale;
     const builds::BuildProfile& profile = builds::ActiveProfile();
     g_module_base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
     g_primary_return = g_module_base + profile.Offsets.render_primary_return_rva;

@@ -114,6 +114,28 @@ void PositionLimitTests() {
     Check(SanitizePositionLimit(kFloatMax, 0.30f) == 0.5f, "float max clamps");
 }
 
+void FovScaleTests() {
+    std::printf("SanitizeFovScale\n");
+    Check(SanitizeFovScale(1.0f) == 1.0f, "1 passes through, and writes nothing downstream");
+    Check(SanitizeFovScale(1.6f) == 1.6f, "an in-range widening passes through");
+    Check(SanitizeFovScale(kMinFovScale) == kMinFovScale, "the narrow bound passes through");
+    Check(SanitizeFovScale(kMaxFovScale) == kMaxFovScale, "the wide bound passes through");
+
+    // A mistyped 100 - reaching for degrees rather than a multiplier - must land
+    // on a wide view rather than on a frustum nothing can be drawn in.
+    Check(SanitizeFovScale(100.0f) == kMaxFovScale, "above the range clamps to the wide bound");
+    Check(SanitizeFovScale(0.1f) == kMinFovScale, "below it clamps to the narrow bound");
+
+    // Zero would divide the projection terms by nothing; a negative would mirror
+    // the frame. Both land on the narrow bound rather than reaching the matrix.
+    Check(SanitizeFovScale(0.0f) == kMinFovScale, "zero clamps rather than dividing by it");
+    Check(SanitizeFovScale(-1.5f) == kMinFovScale, "and a negative cannot mirror the frame");
+
+    Check(SanitizeFovScale(kNan) == 1.0f, "a NaN falls back to 1, which writes nothing");
+    Check(SanitizeFovScale(kInf) == 1.0f, "and so does an infinity");
+    Check(SanitizeFovScale(kFloatMax) == kMaxFovScale, "the top of the float range clamps");
+}
+
 void VirtualKeyTests() {
     std::printf("IsBindableVirtualKey\n");
     Check(IsBindableVirtualKey(0x22), "Page Down can be bound");
@@ -176,6 +198,7 @@ int main() {
     SmoothingTests();
     SensitivityTests();
     PositionLimitTests();
+    FovScaleTests();
     VirtualKeyTests();
     UdpPortTests();
     return sr_test::Summary("config boundary");

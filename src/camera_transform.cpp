@@ -5,6 +5,8 @@
 
 #include <cmath>
 
+#include "camera_fov.h"
+
 #include "cameraunlock/math/quat4.h"
 #include "cameraunlock/math/vec3.h"
 
@@ -56,17 +58,11 @@ void Multiply(const float left[kCameraMatrixFloats],
     }
 }
 
-}  // namespace
-
-void ApplyHeadPoseToRenderCamera(float view[kCameraMatrixFloats], float eye[3],
-                                 const float projection[kCameraMatrixFloats],
-                                 float view_projection[kCameraMatrixFloats],
-                                 const HeadPose& pose, bool world_yaw) {
-    if (pose.yaw == 0.0f && pose.pitch == 0.0f && pose.roll == 0.0f
-        && pose.lean_x == 0.0f && pose.lean_y == 0.0f && pose.lean_z == 0.0f) {
-        return;
-    }
-
+// The pose half of the composition, as measured in the running game: rotate the
+// camera basis, move the eye along the CLEAN axes, and rebuild the translation
+// so the view turns in place rather than orbiting.
+void ApplyHeadPose(float view[kCameraMatrixFloats], float eye[3],
+                   const HeadPose& pose, bool world_yaw) {
     float clean[kCameraMatrixFloats];
     for (int i = 0; i < kCameraMatrixFloats; ++i) clean[i] = view[i];
 
@@ -120,6 +116,25 @@ void ApplyHeadPoseToRenderCamera(float view[kCameraMatrixFloats], float eye[3],
     view[12] = -Vec3::Dot(moved_eye, right);
     view[13] = -Vec3::Dot(moved_eye, up);
     view[14] = -Vec3::Dot(moved_eye, forward);
+}
+
+}  // namespace
+
+void ApplyHeadPoseToRenderCamera(float view[kCameraMatrixFloats], float eye[3],
+                                 float projection[kCameraMatrixFloats],
+                                 float view_projection[kCameraMatrixFloats],
+                                 const HeadPose& pose, bool world_yaw, float fov_scale) {
+    const bool moves_the_camera =
+        pose.yaw != 0.0f || pose.pitch != 0.0f || pose.roll != 0.0f
+        || pose.lean_x != 0.0f || pose.lean_y != 0.0f || pose.lean_z != 0.0f;
+    const bool widens_the_frustum = fov_scale != 1.0f;
+    if (!moves_the_camera && !widens_the_frustum) return;
+
+    if (moves_the_camera) ApplyHeadPose(view, eye, pose, world_yaw);
+    if (widens_the_frustum) ScaleProjectionFieldOfView(projection, fov_scale);
+
+    // Last, and from whatever the two above left behind, so every matrix in the
+    // record describes one camera.
     Multiply(view, projection, view_projection);
 }
 

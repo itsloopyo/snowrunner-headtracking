@@ -17,6 +17,13 @@ struct Config {
     std::uint16_t udp_port = 4242;
     bool enable_on_startup = true;
 
+    // SnowRunner's own Field of View settings, multiplied. The mod scales the
+    // frustum the game built rather than replacing it, so the first-person and
+    // third-person views keep the difference the game's two settings give them,
+    // and a value above 1 reaches angles those settings alone will not go to.
+    // 1.0 leaves the engine's projection untouched.
+    float fov_scale = 1.0f;
+
     // Virtual key codes. Every action has a nav-cluster key and a
     // Ctrl+Shift+<key> chord, and both fire it - the chord is there for
     // keyboards with no nav cluster. Defaults: End, Page Up, Page Down, and the

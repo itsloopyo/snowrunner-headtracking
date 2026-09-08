@@ -29,6 +29,7 @@ constexpr char kIniName[] = "HeadTracking.ini";
 // key in it as absent, which looks exactly like a user who never wrote them.
 constexpr char kSectionNetwork[]  = "Network";
 constexpr char kSectionGeneral[]  = "General";
+constexpr char kSectionCamera[]   = "Camera";
 constexpr char kSectionHotkeys[]  = "Hotkeys";
 constexpr char kSectionRotation[] = "Rotation";
 constexpr char kSectionPosition[] = "Position";
@@ -55,6 +56,19 @@ constexpr char kDefaultIniText[] =
     "UdpPort=4242\r\n\r\n"
     "[General]\r\n"
     "EnableOnStartup=1\r\n\r\n"
+    "[Camera]\r\n"
+    "; SnowRunner has its own Field of View settings, one for the cabin view and\r\n"
+    "; one for the chase view, and FovScale multiplies whichever of them the game\r\n"
+    "; is rendering with - so the two views keep the difference those settings\r\n"
+    "; give them, and either can be taken past what the game's own setting\r\n"
+    "; reaches. 1.25 puts a quarter more of the world across the frame, 0.8 shows\r\n"
+    "; less. Range 0.5 to 2.0. 1.0 leaves the game's projection untouched.\r\n"
+    ";\r\n"
+    "; This is a rendering setting rather than head tracking, so it stays applied\r\n"
+    "; while tracking is toggled off, and turning your head ten degrees turns the\r\n"
+    "; view ten degrees at every setting. HeadTracking.log names the angles it\r\n"
+    "; started from and the ones it produced.\r\n"
+    "FovScale=1.0\r\n\r\n"
     "[Hotkeys]\r\n"
     "; Windows virtual key codes, in hex. Each action has a nav-cluster key and a\r\n"
     "; Ctrl+Shift+<key> chord, and both fire it - remap either or both.\r\n"
@@ -467,6 +481,7 @@ void WarnUnknownKeys(const std::string& path, const char* section,
 void WarnUnknownKeys(const std::string& path) {
     static const char* const kNetwork[]  = { "UdpPort" };
     static const char* const kGeneral[]  = { "EnableOnStartup" };
+    static const char* const kCamera[]   = { "FovScale" };
     static const char* const kHotkeys[]  = { "ToggleKey", "CycleModeKey", "YawModeKey",
                                              "ChordToggleKey", "ChordCycleModeKey",
                                              "ChordYawModeKey" };
@@ -481,6 +496,7 @@ void WarnUnknownKeys(const std::string& path) {
 
     WarnUnknownKeys(path, kSectionNetwork,  kNetwork,  sizeof(kNetwork) / sizeof(kNetwork[0]));
     WarnUnknownKeys(path, kSectionGeneral,  kGeneral,  sizeof(kGeneral) / sizeof(kGeneral[0]));
+    WarnUnknownKeys(path, kSectionCamera,   kCamera,   sizeof(kCamera) / sizeof(kCamera[0]));
     WarnUnknownKeys(path, kSectionHotkeys,  kHotkeys,  sizeof(kHotkeys) / sizeof(kHotkeys[0]));
     WarnUnknownKeys(path, kSectionRotation, kRotation, sizeof(kRotation) / sizeof(kRotation[0]));
     WarnUnknownKeys(path, kSectionPosition, kPosition, sizeof(kPosition) / sizeof(kPosition[0]));
@@ -506,6 +522,9 @@ void LoadConfig(const std::string& exe_dir, Config& out) {
     ReadUdpPort(ini, out);
 
     out.enable_on_startup  = ReadFlag(ini, kSectionGeneral, "EnableOnStartup",  out.enable_on_startup);
+
+    out.fov_scale = ReadFloatValue(ini, kSectionCamera, "FovScale", out.fov_scale,
+                                   [](float raw) { return SanitizeFovScale(raw); });
 
     out.toggle_key            = ReadKey(ini, "ToggleKey",         out.toggle_key);
     out.cycle_mode_key        = ReadKey(ini, "CycleModeKey",      out.cycle_mode_key);

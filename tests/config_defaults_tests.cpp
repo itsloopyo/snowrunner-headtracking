@@ -34,6 +34,7 @@ void CheckMatchesDefaults(const Config& cfg, const char* source) {
 
     Check(cfg.udp_port == defaults.udp_port, "UdpPort");
     Check(cfg.enable_on_startup == defaults.enable_on_startup, "EnableOnStartup");
+    CheckClose(cfg.fov_scale, defaults.fov_scale, "FovScale");
 
     Check(cfg.toggle_key == defaults.toggle_key, "ToggleKey");
     Check(cfg.cycle_mode_key == defaults.cycle_mode_key, "CycleModeKey");
@@ -78,6 +79,7 @@ Config Poisoned() {
     Config cfg;
     cfg.udp_port = 5555;
     cfg.enable_on_startup = false;
+    cfg.fov_scale = 1.75f;
 
     cfg.toggle_key = 0x70;            // F1
     cfg.cycle_mode_key = 0x71;        // F2

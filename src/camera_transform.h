@@ -30,9 +30,14 @@ struct HeadPose {
 // 40 degree head movement. Camera-local is the other position because the cabin
 // camera banks with the truck, and a truck on its roof has a world up that means
 // nothing to the driver.
+//
+// `fov_scale` widens the frustum the game built, which is a separate job from
+// the pose: it changes how much of the world reaches the frame, not where the
+// camera points, so head tracking stays 1:1 at every setting. 1.0 leaves the
+// projection exactly as it arrived.
 void ApplyHeadPoseToRenderCamera(float view[kCameraMatrixFloats], float eye[3],
-                                 const float projection[kCameraMatrixFloats],
+                                 float projection[kCameraMatrixFloats],
                                  float view_projection[kCameraMatrixFloats],
-                                 const HeadPose& pose, bool world_yaw);
+                                 const HeadPose& pose, bool world_yaw, float fov_scale);
 
 }  // namespace sr_ht

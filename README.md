@@ -9,6 +9,7 @@ An unofficial head tracking mod for SnowRunner that moves the camera with your h
 - **Decoupled look and steering** - head tracking moves the camera; steering stays on your wheel or controller
 - **6DOF positional tracking** - lean, peek and duck with head position
 - **Works with any OpenTrack compatible tracker** - free options available for PC and mobile
+- **Field of view past the game's own limit** - one setting widens whichever view you are in, cabin or chase
 
 ## Requirements
 
@@ -117,13 +118,21 @@ UdpPort=4242
 ; Whether tracking is on when the game starts.
 EnableOnStartup=1
 
+[Camera]
+; Multiplies the field of view the game is rendering with. 1.25 puts a quarter
+; more of the world across the frame, 0.8 shows less. Range 0.5 to 2.0, and 1.0
+; leaves the game's own projection untouched.
+FovScale=1.0
+
 [Hotkeys]
 ; Windows virtual key codes, in hex. A value the mod cannot bind leaves that
 ; action on its previous key and says so in the log.
 ToggleKey=0x23
 CycleModeKey=0x21
+YawModeKey=0x22
 ChordToggleKey=0x59
 ChordCycleModeKey=0x47
+ChordYawModeKey=0x48
 
 [Rotation]
 ; Sensitivities multiply the tracker's angles; the inverts flip an axis.
@@ -156,6 +165,8 @@ LimitY=0.20
 LimitZ=0.40
 LimitZBack=0.10
 ```
+
+`FovScale` is the one setting worth a second line. SnowRunner has its own Field of View settings, one for the cabin view and one for the chase view, and this multiplies whichever of the two the game is rendering with - so both views keep the difference those settings give them, and either can be taken past what the game's own setting reaches. `HeadTracking.log` names the angles it started from and the ones it produced. It is a rendering setting rather than head tracking: it stays applied while tracking is toggled off, and turning your head ten degrees turns the view ten degrees at every setting.
 
 The mod picks between the two smoothing values by where the packets came from, and it goes by address rather than by machine. Any `127.x.x.x` address counts as local. A phone on your WiFi gets `RemoteSmoothing`, which is what you want, but so does OpenTrack running on this same PC if you have pointed it at your PC's own network address. Send to a loopback address to get `LocalSmoothing`.
 
@@ -190,6 +201,8 @@ Read `HeadTracking.log`, next to `SnowRunner.exe` in `Sources\Bin`. It records t
 ## Updating
 
 Download the new release and run `install.cmd` again. Your `HeadTracking.ini` is preserved.
+
+That also means a key added by a newer release is not written into the file you already have. Copy the block for it out of the configuration section above, or delete `HeadTracking.ini` and start the game once to get a fresh one with every key in it.
 
 ## Uninstalling
 

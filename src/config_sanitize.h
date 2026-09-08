@@ -67,6 +67,23 @@ inline float SanitizeSensitivity(float v) {
     return ClampRange(SanitizeFinite(v, 1.0f), 0.0f, kMaxSensitivity);
 }
 
+// FovScale multiplies the frustum's half-extent, so the bounds are the range
+// over which the result is still a picture of the world rather than a fisheye
+// or a keyhole. What each end means depends on where the player has SnowRunner's
+// own Field of View settings, because this scales the angle those produce rather
+// than replacing it.
+//
+// The clamp also keeps the tangent bounded. Nothing in this range approaches the
+// 180 degrees at which a perspective projection stops existing, so a mistyped
+// 100 lands on a wide view instead of a projection matrix full of Inf - and a
+// negative one, which would mirror the frame, lands on the narrow end.
+constexpr float kMinFovScale = 0.5f;
+constexpr float kMaxFovScale = 2.0f;
+
+inline float SanitizeFovScale(float v) {
+    return ClampRange(SanitizeFinite(v, 1.0f), kMinFovScale, kMaxFovScale);
+}
+
 // A virtual key code the hotkey poller can actually watch. GetAsyncKeyState
 // only defines 0x01..0xFE, so a typo like ToggleKey=0x230 registers a hotkey
 // that can never fire and the key silently does nothing.
