@@ -8,7 +8,7 @@ An unofficial head tracking mod for SnowRunner that moves the camera with your h
 
 - **Decoupled look and steering** - head tracking moves the camera; steering stays on your wheel or controller
 - **6DOF positional tracking** - lean, peek and duck with head position
-- **Works with any OpenTrack compatible tracker** - free options available for PC and mobile
+- **Works with any OpenTrack compatible tracker** - free options available for PC, iOS and Android
 - **Field of view past the game's own limit** - one setting widens whichever view you are in, cabin or chase
 
 ## Requirements

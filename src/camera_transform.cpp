@@ -138,4 +138,12 @@ void ApplyHeadPoseToRenderCamera(float view[kCameraMatrixFloats], float eye[3],
     Multiply(view, projection, view_projection);
 }
 
+void ExpandCullingFrustum(const float view[kCameraMatrixFloats],
+                         float projection[kCameraMatrixFloats],
+                         float view_projection[kCameraMatrixFloats]) {
+    // Keep visibility planes outside the scaled view, including at maximum FovScale.
+    ScaleProjectionFieldOfView(projection, 1.05f);
+    Multiply(view, projection, view_projection);
+}
+
 }  // namespace sr_ht

@@ -387,6 +387,81 @@ void FieldOfViewAndPoseComposeTogether() {
     }
 }
 
+void CullingContainsTheScaledView() {
+    std::printf("\nculling contains the scaled view with room beyond every edge\n");
+    const Camera cameras[] = {LevelCamera(), PitchedCamera(), BankedCamera()};
+    const HeadPose poses[] = {
+        {},
+        {80.0f, 40.0f, 25.0f, 0.3f, 0.2f, -0.4f},
+        {-80.0f, -40.0f, -25.0f, -0.3f, -0.2f, 0.4f},
+    };
+    const float scales[] = {0.5f, 1.0f, 1.6f, 2.0f};
+    const bool yaw_modes[] = {false, true};
+    const float depths[] = {1.0f, 100.0f, 1000.0f};
+    const float edges[] = {-1.0f, 0.0f, 1.0f};
+    const float extents[] = {1.02f, 1.10f};
+
+    for (const Camera& clean : cameras) {
+        for (const HeadPose& pose : poses) {
+            for (bool world_yaw : yaw_modes) {
+                for (float scale : scales) {
+                    Camera rendered = clean;
+                    Apply(rendered, pose, world_yaw, scale);
+                    Camera culled = rendered;
+                    ExpandCullingFrustum(culled.view, culled.projection,
+                                         culled.view_projection);
+                    Check(std::memcmp(culled.view, rendered.view, sizeof(culled.view)) == 0,
+                          "culling keeps the rendered orientation and translation");
+                    Check(std::memcmp(culled.eye, rendered.eye, sizeof(culled.eye)) == 0,
+                          "culling keeps the rendered eye");
+                    for (int i = 0; i < kCameraMatrixFloats; ++i) {
+                        if (i == kProjectionHorizontal || i == kProjectionVertical) continue;
+                        CheckClose(culled.projection[i], rendered.projection[i],
+                                   "culling preserves depth and other projection terms");
+                    }
+
+                    bool contains_view = true;
+                    bool rejects_outside = true;
+                    for (float depth : depths) {
+                        for (float x : edges) {
+                            for (float y : edges) {
+                                for (float extent : extents) {
+                                    const float local[3] = {
+                                        x * extent * depth / rendered.projection[0],
+                                        y * extent * depth / rendered.projection[5],
+                                        depth,
+                                    };
+                                    float point[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+                                    for (int row = 0; row < 3; ++row) {
+                                        point[row] = rendered.eye[row];
+                                        for (int axis = 0; axis < 3; ++axis) {
+                                            point[row] += rendered.view[row * 4 + axis] * local[axis];
+                                        }
+                                    }
+                                    float clip[4]{};
+                                    for (int column = 0; column < 4; ++column) {
+                                        for (int row = 0; row < 4; ++row) {
+                                            clip[column] += point[row] * culled.view_projection[row * 4 + column];
+                                        }
+                                    }
+                                    const bool inside = clip[3] > 0.0f
+                                        && std::fabs(clip[0]) < clip[3]
+                                        && std::fabs(clip[1]) < clip[3]
+                                        && clip[2] > 0.0f && clip[2] < clip[3];
+                                    if (extent < 1.05f) contains_view &= inside;
+                                    else if (x != 0.0f || y != 0.0f) rejects_outside &= !inside;
+                                }
+                            }
+                        }
+                    }
+                    Check(contains_view, "all view edges and corners have a culling margin");
+                    Check(rejects_outside, "geometry beyond the margin is still culled");
+                }
+            }
+        }
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -399,5 +474,6 @@ int main() {
     ZeroPoseIsByteExact();
     FieldOfViewScalesTheFrustumOnly();
     FieldOfViewAndPoseComposeTogether();
+    CullingContainsTheScaledView();
     return sr_test::Summary("camera transform");
 }

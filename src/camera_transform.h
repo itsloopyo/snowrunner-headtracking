@@ -40,4 +40,8 @@ void ApplyHeadPoseToRenderCamera(float view[kCameraMatrixFloats], float eye[3],
                                  float view_projection[kCameraMatrixFloats],
                                  const HeadPose& pose, bool world_yaw, float fov_scale);
 
+void ExpandCullingFrustum(const float view[kCameraMatrixFloats],
+                         float projection[kCameraMatrixFloats],
+                         float view_projection[kCameraMatrixFloats]);
+
 }  // namespace sr_ht

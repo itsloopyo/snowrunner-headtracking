@@ -148,6 +148,9 @@ void* __fastcall CameraFrustumDetour(void* camera, void* output, float far_plane
     alignas(16) std::uint8_t tracked[kRenderCameraBytes];
     std::memcpy(tracked, camera, sizeof(tracked));
     ComposeRenderCamera(tracked, pose, world_yaw);
+    ExpandCullingFrustum(reinterpret_cast<const float*>(tracked + g_view_offset),
+                        reinterpret_cast<float*>(tracked + g_projection_offset),
+                        reinterpret_cast<float*>(tracked + g_view_projection_offset));
     return g_original_camera_frustum(tracked, output, far_plane);
 }
 
