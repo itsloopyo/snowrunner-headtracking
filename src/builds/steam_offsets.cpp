@@ -23,6 +23,9 @@ extern const BuildProfile kSteamProfile_20260722 = {
         /* drive_camera_update_rva     */ 0x00A17740,
         /* render_camera_upload_rva    */ 0x00DA2D40,
         /* camera_frustum_rva          */ 0x00DA2F10,
+        /* camera_bounds_rva           */ 0x00DA3010,
+        /* camera_view_rays_rva        */ 0x00DA3280,
+        /* motion_blur_rays_return_rva */ 0x00ABAE71,
         /* player_camera_getter_rva    */ 0x00AD5EF0,
         /* matrix_inverse_rva          */ 0x01153480,
         /* frustum_frame_return_rva    */ 0x00E0D9E1,
@@ -31,6 +34,7 @@ extern const BuildProfile kSteamProfile_20260722 = {
         /* render_eye                  */ 0x0B0,
         /* render_view_projection      */ 0x0C0,
         /* render_inverse_view         */ 0x080,
+        /* render_vertical_fov         */ 0x108,
     },
 };
 

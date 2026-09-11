@@ -40,10 +40,11 @@ struct HeadPose {
 void ApplyHeadPoseToRenderCamera(float view[kCameraMatrixFloats], float eye[3],
                                  float projection[kCameraMatrixFloats],
                                  float view_projection[kCameraMatrixFloats],
-                                 const HeadPose& pose, bool world_yaw, float fov_degrees);
+                                 float& vertical_fov_radians, const HeadPose& pose,
+                                 bool world_yaw, float fov_degrees);
 
 void ExpandCullingFrustum(const float view[kCameraMatrixFloats],
                          float projection[kCameraMatrixFloats],
-                         float view_projection[kCameraMatrixFloats]);
+                         float view_projection[kCameraMatrixFloats], float& vertical_fov_radians);
 
 }  // namespace sr_ht

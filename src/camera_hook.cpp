@@ -28,12 +28,16 @@ using RenderCameraUploadFn = void(__fastcall*)(void*, void*, void*, int);
 using CameraFrustumFn = void*(__fastcall*)(void*, void*, float);
 using PlayerCameraGetterFn = void*(__fastcall*)();
 using MatrixInverseFn = void(__fastcall*)(void*, int, void*);
+using ViewRaysFn = void(__fastcall*)(void*, void*);
+using BoundsFn = void(__fastcall*)(void*, void*, void*, float);
 
 DriveCameraUpdateFn g_original_drive_camera_update = nullptr;
 RenderCameraUploadFn g_original_render_camera_upload = nullptr;
 CameraFrustumFn g_original_camera_frustum = nullptr;
 PlayerCameraGetterFn g_player_camera = nullptr;
 MatrixInverseFn g_matrix_inverse = nullptr;
+ViewRaysFn g_original_view_rays = nullptr;
+BoundsFn g_original_bounds = nullptr;
 
 std::uintptr_t g_module_base = 0;
 std::uintptr_t g_frustum_frame_return = 0;
@@ -42,6 +46,8 @@ unsigned g_projection_offset = 0;
 unsigned g_eye_offset = 0;
 unsigned g_view_projection_offset = 0;
 unsigned g_inverse_view_offset = 0;
+unsigned g_vertical_fov_offset = 0;
+std::uintptr_t g_motion_blur_rays_return = 0;
 constexpr unsigned kRenderCameraBytes = 0x134;
 
 std::atomic<unsigned long long> g_last_drive_camera_tick{0};
@@ -140,8 +146,9 @@ void ComposeRenderCamera(std::uint8_t* bytes, const HeadPose& pose, bool world_y
     std::memcpy(&inverse_marker, inverse, sizeof(inverse_marker));
     if (inverse_marker == -1) g_matrix_inverse(inverse, 0, view);
     LogFieldOfViewOnce(projection);
-    ApplyHeadPoseToRenderCamera(view, eye, projection, view_projection, pose, world_yaw,
-                                g_fov_degrees);
+    ApplyHeadPoseToRenderCamera(view, eye, projection, view_projection,
+                                *reinterpret_cast<float*>(bytes + g_vertical_fov_offset),
+                                pose, world_yaw, g_fov_degrees);
     g_matrix_inverse(inverse, 0, view);
 }
 
@@ -161,25 +168,14 @@ void* __fastcall CameraFrustumDetour(void* camera, void* output, float far_plane
     ComposeRenderCamera(tracked, pose, world_yaw);
     ExpandCullingFrustum(reinterpret_cast<const float*>(tracked + g_view_offset),
                         reinterpret_cast<float*>(tracked + g_projection_offset),
-                        reinterpret_cast<float*>(tracked + g_view_projection_offset));
+                        reinterpret_cast<float*>(tracked + g_view_projection_offset),
+                        *reinterpret_cast<float*>(tracked + g_vertical_fov_offset));
     return g_original_camera_frustum(tracked, output, far_plane);
 }
 
 void __fastcall RenderCameraUploadDetour(void* camera_data, void* context,
                                          void* bindings, int pass) {
-    // Every pass that draws the player's view is handed the player's own camera
-    // record, and the uploader is given that record by pointer - so identity is
-    // the whole test, and it is the same one the visibility hook applies.
-    //
-    // This was two pinned return addresses until a third player-view pass turned
-    // up that nobody had pinned. It ran with the camera the game built while the
-    // frame around it was drawn with the tracked one, and what it drew landed
-    // where the head was not looking: a hard-edged column of sun glare sliding in
-    // from the edge opposite the turn, worst at a wide Fov and a big yaw.
-    // Identity catches every such pass, on this build and on the next one,
-    // without an address to re-derive. The shadow and light passes are handed a
-    // different camera (a top-down orthographic one) and still pass straight
-    // through.
+    // Shadows use separate cameras; every player-view upload uses this record.
     const std::uintptr_t caller = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
     if (camera_data != g_player_camera()) {
         g_original_render_camera_upload(camera_data, context, bindings, pass);
@@ -197,6 +193,44 @@ void __fastcall RenderCameraUploadDetour(void* camera_data, void* context,
     std::memcpy(tracked, camera_data, sizeof(tracked));
     ComposeRenderCamera(tracked, pose, world_yaw);
     g_original_render_camera_upload(tracked, context, bindings, pass);
+}
+
+void __fastcall ViewRaysDetour(void* camera, void* output) {
+    const auto caller = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    // Motion blur pairs these rays with its clean historical view-projection.
+    // Rotating only the current rays produces continuous blur at a held pose.
+    if (caller == g_motion_blur_rays_return) {
+        g_original_view_rays(camera, output);
+        return;
+    }
+    HeadPose pose;
+    bool world_yaw = false;
+    if (camera != g_player_camera() || !ShouldComposeCamera(caller, pose, world_yaw)) {
+        g_original_view_rays(camera, output);
+        return;
+    }
+    alignas(16) std::uint8_t tracked[kRenderCameraBytes];
+    std::memcpy(tracked, camera, sizeof(tracked));
+    ComposeRenderCamera(tracked, pose, world_yaw);
+    g_original_view_rays(tracked, output);
+}
+
+void __fastcall BoundsDetour(void* camera, void* minimum, void* maximum, float far_plane) {
+    const auto caller = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    HeadPose pose;
+    bool world_yaw = false;
+    if (camera != g_player_camera() || !ShouldComposeCamera(caller, pose, world_yaw)) {
+        g_original_bounds(camera, minimum, maximum, far_plane);
+        return;
+    }
+    alignas(16) std::uint8_t tracked[kRenderCameraBytes];
+    std::memcpy(tracked, camera, sizeof(tracked));
+    ComposeRenderCamera(tracked, pose, world_yaw);
+    ExpandCullingFrustum(reinterpret_cast<const float*>(tracked + g_view_offset),
+                        reinterpret_cast<float*>(tracked + g_projection_offset),
+                        reinterpret_cast<float*>(tracked + g_view_projection_offset),
+                        *reinterpret_cast<float*>(tracked + g_vertical_fov_offset));
+    g_original_bounds(tracked, minimum, maximum, far_plane);
 }
 
 bool Failed(cameraunlock::hooks::HookStatus status, const char* what) {
@@ -226,6 +260,8 @@ bool InstallCameraHook(float fov_degrees) {
     g_eye_offset = profile.Offsets.render_eye;
     g_view_projection_offset = profile.Offsets.render_view_projection;
     g_inverse_view_offset = profile.Offsets.render_inverse_view;
+    g_vertical_fov_offset = profile.Offsets.render_vertical_fov;
+    g_motion_blur_rays_return = g_module_base + profile.Offsets.motion_blur_rays_return_rva;
 
     void* const drive_target = reinterpret_cast<void*>(
         g_module_base + profile.Offsets.drive_camera_update_rva);
@@ -259,13 +295,31 @@ bool InstallCameraHook(float fov_degrees) {
                "hooking camera visibility")) {
         return false;
     }
+    cameraunlock::hooks::ScopedHook rays_hook;
+    cameraunlock::hooks::ScopedHook bounds_hook;
+    void* const rays_target = reinterpret_cast<void*>(
+        g_module_base + profile.Offsets.camera_view_rays_rva);
+    void* const bounds_target = reinterpret_cast<void*>(
+        g_module_base + profile.Offsets.camera_bounds_rva);
+    if (Failed(rays_hook.Create(rays_target, reinterpret_cast<void*>(&ViewRaysDetour),
+                               reinterpret_cast<void**>(&g_original_view_rays)),
+               "hooking view rays")) {
+        return false;
+    }
+    if (Failed(bounds_hook.Create(bounds_target, reinterpret_cast<void*>(&BoundsDetour),
+                                 reinterpret_cast<void**>(&g_original_bounds)),
+               "hooking visibility bounds")) {
+        return false;
+    }
+    rays_hook.Release();
+    bounds_hook.Release();
     drive_hook.Release();
     render_hook.Release();
     frustum_hook.Release();
 
     Log::Line("[camera] hooked vehicle activity at 0x%p, player render upload at 0x%p "
-              "and visibility at 0x%p (profile %s)",
-              drive_target, render_target, frustum_target, profile.Name);
+              "and visibility at 0x%p, bounds at 0x%p, view rays at 0x%p (profile %s)",
+              drive_target, render_target, frustum_target, bounds_target, rays_target, profile.Name);
     return true;
 }
 

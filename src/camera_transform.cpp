@@ -123,7 +123,8 @@ void ApplyHeadPose(float view[kCameraMatrixFloats], float eye[3],
 void ApplyHeadPoseToRenderCamera(float view[kCameraMatrixFloats], float eye[3],
                                  float projection[kCameraMatrixFloats],
                                  float view_projection[kCameraMatrixFloats],
-                                 const HeadPose& pose, bool world_yaw, float fov_degrees) {
+                                 float& vertical_fov_radians, const HeadPose& pose,
+                                 bool world_yaw, float fov_degrees) {
     const bool moves_the_camera =
         pose.yaw != 0.0f || pose.pitch != 0.0f || pose.roll != 0.0f
         || pose.lean_x != 0.0f || pose.lean_y != 0.0f || pose.lean_z != 0.0f;
@@ -136,7 +137,11 @@ void ApplyHeadPoseToRenderCamera(float view[kCameraMatrixFloats], float eye[3],
     if (!moves_the_camera && !widens_the_frustum) return;
 
     if (moves_the_camera) ApplyHeadPose(view, eye, pose, world_yaw);
-    if (widens_the_frustum) ScaleProjectionFieldOfView(projection, fov_scale);
+    if (widens_the_frustum) {
+        ScaleProjectionFieldOfView(projection, fov_scale);
+        // Frustum rebuilds and view rays read the angle, not the cached matrix.
+        vertical_fov_radians = 2.0f * std::atan(1.0f / projection[kProjectionVertical]);
+    }
 
     // Last, and from whatever the two above left behind, so every matrix in the
     // record describes one camera.
@@ -145,9 +150,10 @@ void ApplyHeadPoseToRenderCamera(float view[kCameraMatrixFloats], float eye[3],
 
 void ExpandCullingFrustum(const float view[kCameraMatrixFloats],
                          float projection[kCameraMatrixFloats],
-                         float view_projection[kCameraMatrixFloats]) {
+                         float view_projection[kCameraMatrixFloats], float& vertical_fov_radians) {
     // Keep visibility planes outside the widened view, at every configured angle.
     ScaleProjectionFieldOfView(projection, 1.05f);
+    vertical_fov_radians = 2.0f * std::atan(1.0f / projection[kProjectionVertical]);
     Multiply(view, projection, view_projection);
 }
 

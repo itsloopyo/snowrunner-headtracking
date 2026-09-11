@@ -22,6 +22,9 @@ struct OffsetTable {
     // a camera of their own and must remain untouched.
     unsigned int render_camera_upload_rva;
     unsigned int camera_frustum_rva;
+    unsigned int camera_bounds_rva;
+    unsigned int camera_view_rays_rva;
+    unsigned int motion_blur_rays_return_rva;
     unsigned int player_camera_getter_rva;
     unsigned int matrix_inverse_rva;
     unsigned int frustum_frame_return_rva;
@@ -34,6 +37,7 @@ struct OffsetTable {
     unsigned int render_eye;
     unsigned int render_view_projection;
     unsigned int render_inverse_view;
+    unsigned int render_vertical_fov;
 };
 
 struct BuildProfile {
@@ -49,13 +53,17 @@ inline bool IsProfileComplete(const BuildProfile& p) {
     return p.Offsets.drive_camera_update_rva != 0
         && p.Offsets.render_camera_upload_rva != 0
         && p.Offsets.camera_frustum_rva != 0
+        && p.Offsets.camera_bounds_rva != 0
+        && p.Offsets.camera_view_rays_rva != 0
+        && p.Offsets.motion_blur_rays_return_rva != 0
         && p.Offsets.player_camera_getter_rva != 0
         && p.Offsets.matrix_inverse_rva != 0
         && p.Offsets.frustum_frame_return_rva != 0
         && p.Offsets.render_projection != 0
         && p.Offsets.render_eye != 0
         && p.Offsets.render_view_projection != 0
-        && p.Offsets.render_inverse_view != 0;
+        && p.Offsets.render_inverse_view != 0
+        && p.Offsets.render_vertical_fov != 0;
 }
 
 }  // namespace sr_ht::builds

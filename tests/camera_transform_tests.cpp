@@ -30,6 +30,7 @@ struct Camera {
     float eye[3];
     float projection[kCameraMatrixFloats];
     float view_projection[kCameraMatrixFloats];
+    float vertical_fov = 2.0f * std::atan(1.0f / kProjection[5]);
 };
 
 float Dot(const float* a, const float* b) {
@@ -106,7 +107,8 @@ Camera BankedCamera() {
 void Apply(Camera& camera, const HeadPose& pose, bool world_yaw = true,
            float fov_degrees = 0.0f) {
     ApplyHeadPoseToRenderCamera(camera.view, camera.eye, camera.projection,
-                                camera.view_projection, pose, world_yaw, fov_degrees);
+                                camera.view_projection, camera.vertical_fov,
+                                pose, world_yaw, fov_degrees);
 }
 
 // The horizontal term a projection rendering `degrees` across its width holds.
@@ -435,9 +437,12 @@ void CullingContainsTheScaledView() {
                 for (float fov : fovs) {
                     Camera rendered = clean;
                     Apply(rendered, pose, world_yaw, fov);
+                    CheckClose(std::tan(rendered.vertical_fov * 0.5f),
+                               1.0f / rendered.projection[kProjectionVertical],
+                               "view rays use the rendered vertical field of view");
                     Camera culled = rendered;
                     ExpandCullingFrustum(culled.view, culled.projection,
-                                         culled.view_projection);
+                                         culled.view_projection, culled.vertical_fov);
                     Check(std::memcmp(culled.view, rendered.view, sizeof(culled.view)) == 0,
                           "culling keeps the rendered orientation and translation");
                     Check(std::memcmp(culled.eye, rendered.eye, sizeof(culled.eye)) == 0,
@@ -448,6 +453,19 @@ void CullingContainsTheScaledView() {
                                    "culling preserves depth and other projection terms");
                     }
 
+                    const float aspect = clean.projection[5] / clean.projection[0];
+                    const float vertical_term = 1.0f / std::tan(culled.vertical_fov * 0.5f);
+                    const float near_plane = 0.5f;
+                    const float far_plane = 1500.0f;
+                    float rebuilt_projection[kCameraMatrixFloats] = {
+                        vertical_term / aspect, 0, 0, 0,
+                        0, vertical_term, 0, 0,
+                        0, 0, far_plane / (far_plane - near_plane), 1,
+                        0, 0, -near_plane * far_plane / (far_plane - near_plane), 0,
+                    };
+                    float products[2][kCameraMatrixFloats];
+                    std::memcpy(products[0], culled.view_projection, sizeof(products[0]));
+                    Multiply(culled.view, rebuilt_projection, products[1]);
                     bool contains_view = true;
                     bool rejects_outside = true;
                     for (float depth : depths) {
@@ -466,23 +484,25 @@ void CullingContainsTheScaledView() {
                                             point[row] += rendered.view[row * 4 + axis] * local[axis];
                                         }
                                     }
-                                    float clip[4]{};
-                                    for (int column = 0; column < 4; ++column) {
-                                        for (int row = 0; row < 4; ++row) {
-                                            clip[column] += point[row] * culled.view_projection[row * 4 + column];
+                                    for (const auto& product : products) {
+                                        float clip[4]{};
+                                        for (int column = 0; column < 4; ++column) {
+                                            for (int row = 0; row < 4; ++row) {
+                                                clip[column] += point[row] * product[row * 4 + column];
+                                            }
                                         }
+                                        const bool inside = clip[3] > 0.0f
+                                            && std::fabs(clip[0]) < clip[3]
+                                            && std::fabs(clip[1]) < clip[3]
+                                            && clip[2] > 0.0f && clip[2] < clip[3];
+                                        if (extent < 1.05f) contains_view &= inside;
+                                        else if (x != 0.0f || y != 0.0f) rejects_outside &= !inside;
                                     }
-                                    const bool inside = clip[3] > 0.0f
-                                        && std::fabs(clip[0]) < clip[3]
-                                        && std::fabs(clip[1]) < clip[3]
-                                        && clip[2] > 0.0f && clip[2] < clip[3];
-                                    if (extent < 1.05f) contains_view &= inside;
-                                    else if (x != 0.0f || y != 0.0f) rejects_outside &= !inside;
                                 }
                             }
                         }
                     }
-                    Check(contains_view, "all view edges and corners have a culling margin");
+                    Check(contains_view, "cached and rebuilt frusta both contain the rendered view with a margin");
                     Check(rejects_outside, "geometry beyond the margin is still culled");
                 }
             }

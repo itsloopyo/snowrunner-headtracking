@@ -34,6 +34,9 @@ extern const BuildProfile kGdkProfile_20260722 = {
         /* drive_camera_update_rva     */ 0x004BB9E0,
         /* render_camera_upload_rva    */ 0x00A069E0,
         /* camera_frustum_rva          */ 0x00A06BB0,
+        /* camera_bounds_rva           */ 0x00A06CB0,
+        /* camera_view_rays_rva        */ 0x00A06F20,
+        /* motion_blur_rays_return_rva */ 0x00595D41,
         /* player_camera_getter_rva    */ 0x005C1060,
         /* matrix_inverse_rva          */ 0x00DEB280,
         /* frustum_frame_return_rva    */ 0x00AAD0E9,
@@ -42,6 +45,7 @@ extern const BuildProfile kGdkProfile_20260722 = {
         /* render_eye                  */ 0x0B0,
         /* render_view_projection      */ 0x0C0,
         /* render_inverse_view         */ 0x080,
+        /* render_vertical_fov         */ 0x108,
     },
 };
 
