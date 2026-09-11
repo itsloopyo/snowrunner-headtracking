@@ -143,7 +143,10 @@ UdpPort=4242
 EnableOnStartup=1
 
 [Camera]
-; Field of view, in degrees across the width of the screen. 30 to 140.
+; Actual horizontal field of view in degrees. 30 to 140.
+; Fov=130 spans 130 degrees across the screen in cabin and chase views.
+; SnowRunner's sliders use a different scale; matching numbers give different views.
+; The vertical angle follows the screen's aspect ratio.
 ; 0 keeps the game's own Field of View settings.
 Fov=0
 
@@ -189,11 +192,13 @@ LimitZ=0.40
 LimitZBack=0.10
 ```
 
-`Fov` is the one setting worth a second line. Type the angle you want across the width of the screen and the mod renders it, reaching well past what SnowRunner's own Field of View settings go to. It applies to the cabin view and the chase view alike, so while it is set the two render at the same angle rather than at the two the game's own settings give them; `Fov=0` hands both back.
+`Fov` sets the actual horizontal viewing angle in degrees, from 30 to 140. For example, `Fov=130` spans 130 degrees across the screen in both cabin and chase views. `Fov=0` keeps the game's own Field of View settings.
 
-`HeadTracking.log` names the angle the game was drawing before the mod touched it, on a line that starts `[camera]`, and that is the number to pick yours relative to. It depends on where your own Field of View settings are and on which view was on screen first.
+SnowRunner's sliders use a different scale. The game multiplies the slider value by 9/16 to get a base vertical angle, then applies further camera-state adjustments. Its 130 therefore starts at 73.125 degrees vertically, before those adjustments. Matching numbers in the game and the mod do not give matching views.
 
-The vertical angle follows your screen's shape, so an ultrawide asking for the same number gets a wider picture rather than a differently shaped one. It is a rendering setting rather than head tracking: it stays applied while tracking is toggled off, and turning your head ten degrees turns the view ten degrees at every setting.
+The mod keeps the horizontal angle fixed at your chosen value. The vertical angle follows the screen's aspect ratio: at the same `Fov`, an ultrawide screen shows less vertically than a 16:9 screen. The override stays applied while head tracking is toggled off.
+
+`HeadTracking.log` reports the game's horizontal and vertical angles before the override on a line starting `[camera]`, followed by the configured result when `Fov` is set. This samples the first reported view; the game's angles can change with its settings, camera state and aspect ratio.
 
 The mod picks between the two smoothing values by where the packets came from, and it goes by address rather than by machine. Any `127.x.x.x` address counts as local. A phone on your WiFi gets `RemoteSmoothing`, which is what you want, but so does OpenTrack running on this same PC if you have pointed it at your PC's own network address. Send to a loopback address to get `LocalSmoothing`.
 
