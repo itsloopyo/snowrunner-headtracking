@@ -33,8 +33,6 @@ extern const BuildProfile kGdkProfile_20260722 = {
     {
         /* drive_camera_update_rva     */ 0x004BB9E0,
         /* render_camera_upload_rva    */ 0x00A069E0,
-        /* render_primary_return_rva   */ 0x0059A007,
-        /* render_secondary_return_rva */ 0x0059C064,
         /* camera_frustum_rva          */ 0x00A06BB0,
         /* player_camera_getter_rva    */ 0x005C1060,
         /* matrix_inverse_rva          */ 0x00DEB280,

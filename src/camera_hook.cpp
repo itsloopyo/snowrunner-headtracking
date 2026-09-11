@@ -36,8 +36,6 @@ PlayerCameraGetterFn g_player_camera = nullptr;
 MatrixInverseFn g_matrix_inverse = nullptr;
 
 std::uintptr_t g_module_base = 0;
-std::uintptr_t g_primary_return = 0;
-std::uintptr_t g_secondary_return = 0;
 std::uintptr_t g_frustum_frame_return = 0;
 unsigned g_view_offset = 0;
 unsigned g_projection_offset = 0;
@@ -169,8 +167,21 @@ void* __fastcall CameraFrustumDetour(void* camera, void* output, float far_plane
 
 void __fastcall RenderCameraUploadDetour(void* camera_data, void* context,
                                          void* bindings, int pass) {
+    // Every pass that draws the player's view is handed the player's own camera
+    // record, and the uploader is given that record by pointer - so identity is
+    // the whole test, and it is the same one the visibility hook applies.
+    //
+    // This was two pinned return addresses until a third player-view pass turned
+    // up that nobody had pinned. It ran with the camera the game built while the
+    // frame around it was drawn with the tracked one, and what it drew landed
+    // where the head was not looking: a hard-edged column of sun glare sliding in
+    // from the edge opposite the turn, worst at a wide Fov and a big yaw.
+    // Identity catches every such pass, on this build and on the next one,
+    // without an address to re-derive. The shadow and light passes are handed a
+    // different camera (a top-down orthographic one) and still pass straight
+    // through.
     const std::uintptr_t caller = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
-    if (caller != g_primary_return && caller != g_secondary_return) {
+    if (camera_data != g_player_camera()) {
         g_original_render_camera_upload(camera_data, context, bindings, pass);
         return;
     }
@@ -205,8 +216,6 @@ bool InstallCameraHook(float fov_degrees) {
     g_fov_degrees = fov_degrees;
     const builds::BuildProfile& profile = builds::ActiveProfile();
     g_module_base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
-    g_primary_return = g_module_base + profile.Offsets.render_primary_return_rva;
-    g_secondary_return = g_module_base + profile.Offsets.render_secondary_return_rva;
     g_frustum_frame_return = g_module_base + profile.Offsets.frustum_frame_return_rva;
     g_player_camera = reinterpret_cast<PlayerCameraGetterFn>(
         g_module_base + profile.Offsets.player_camera_getter_rva);

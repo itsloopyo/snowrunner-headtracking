@@ -22,8 +22,6 @@ extern const BuildProfile kSteamProfile_20260722 = {
     {
         /* drive_camera_update_rva     */ 0x00A17740,
         /* render_camera_upload_rva    */ 0x00DA2D40,
-        /* render_primary_return_rva   */ 0x00ABF137,
-        /* render_secondary_return_rva */ 0x00AC1194,
         /* camera_frustum_rva          */ 0x00DA2F10,
         /* player_camera_getter_rva    */ 0x00AD5EF0,
         /* matrix_inverse_rva          */ 0x01153480,

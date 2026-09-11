@@ -16,12 +16,11 @@ struct OffsetTable {
     unsigned int drive_camera_update_rva;
 
     // Uploads one render camera's matrices and eye into the frame's constant
-    // buffer. The two return addresses are the player-view calls measured in
-    // both exterior and cabin views; the same uploader also handles shadows and
-    // reflections, which must remain untouched.
+    // buffer. Which of its calls belong to the player's view is decided from the
+    // camera it is handed rather than from where it was called, so no call site
+    // is pinned here; the same uploader also serves shadows and light, which get
+    // a camera of their own and must remain untouched.
     unsigned int render_camera_upload_rva;
-    unsigned int render_primary_return_rva;
-    unsigned int render_secondary_return_rva;
     unsigned int camera_frustum_rva;
     unsigned int player_camera_getter_rva;
     unsigned int matrix_inverse_rva;
@@ -49,8 +48,6 @@ struct BuildProfile {
 inline bool IsProfileComplete(const BuildProfile& p) {
     return p.Offsets.drive_camera_update_rva != 0
         && p.Offsets.render_camera_upload_rva != 0
-        && p.Offsets.render_primary_return_rva != 0
-        && p.Offsets.render_secondary_return_rva != 0
         && p.Offsets.camera_frustum_rva != 0
         && p.Offsets.player_camera_getter_rva != 0
         && p.Offsets.matrix_inverse_rva != 0
