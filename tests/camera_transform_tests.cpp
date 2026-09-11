@@ -3,6 +3,7 @@
 
 #include "camera_fov.h"
 #include "camera_transform.h"
+#include "config_sanitize.h"
 
 #include "test_support.h"
 
@@ -103,9 +104,14 @@ Camera BankedCamera() {
 // World yaw is the shipped default, so it is what the unqualified helper uses
 // and what every other case here is written against.
 void Apply(Camera& camera, const HeadPose& pose, bool world_yaw = true,
-           float fov_scale = 1.0f) {
+           float fov_degrees = 0.0f) {
     ApplyHeadPoseToRenderCamera(camera.view, camera.eye, camera.projection,
-                                camera.view_projection, pose, world_yaw, fov_scale);
+                                camera.view_projection, pose, world_yaw, fov_degrees);
+}
+
+// The horizontal term a projection rendering `degrees` across its width holds.
+float HorizontalTermFor(float degrees) {
+    return 1.0f / std::tan(0.5f * degrees * kDegreesToRadians);
 }
 
 void CheckVector(const float actual[3], const float expected[3], const char* what) {
@@ -319,20 +325,33 @@ void ZeroPoseIsByteExact() {
           "the complete camera record is unchanged");
 }
 
-// FovScale is a rendering setting, not a pose, so the two have to compose
-// without either touching the other's data.
-void FieldOfViewScalesTheFrustumOnly() {
-    std::printf("\nFovScale widens the frustum and nothing else\n");
+// Fov is a rendering setting, not a pose, so the two have to compose without
+// either touching the other's data.
+void FieldOfViewSetsTheFrustumOnly() {
+    std::printf("\nFov lands on the configured angle and changes nothing else\n");
     Camera camera = PitchedCamera();
     const Camera clean = camera;
-    Apply(camera, HeadPose(), true, 1.25f);
+    const float base_horizontal = ProjectionFovDegrees(clean.projection[kProjectionHorizontal], 1.0f);
+    const float base_vertical = ProjectionFovDegrees(clean.projection[kProjectionVertical], 1.0f);
+    Apply(camera, HeadPose(), true, 65.0f);
 
-    CheckClose(camera.projection[kProjectionHorizontal],
-               clean.projection[kProjectionHorizontal] / 1.25f,
-               "the horizontal term is divided by the scale");
-    CheckClose(camera.projection[kProjectionVertical],
-               clean.projection[kProjectionVertical] / 1.25f,
-               "and so is the vertical one");
+    // The whole point of the setting: the number the player typed is the angle
+    // the frame spans, whatever the game's own Field of View settings were at.
+    CheckClose(ProjectionFovDegrees(camera.projection[kProjectionHorizontal], 1.0f), 65.0f,
+               "the frame spans the configured angle across its width");
+    CheckClose(camera.projection[kProjectionHorizontal], HorizontalTermFor(65.0f),
+               "which is the term a projection at that angle holds");
+
+    // The vertical follows the screen rather than the setting, so an ultrawide
+    // and a 16:9 display asking for the same angle across the width get the same
+    // picture widened, not a different shape.
+    CheckClose(camera.projection[kProjectionHorizontal] / camera.projection[kProjectionVertical],
+               clean.projection[kProjectionHorizontal] / clean.projection[kProjectionVertical],
+               "and the aspect the game built is unchanged");
+    Check(std::fabs(ProjectionFovDegrees(camera.projection[kProjectionVertical], 1.0f)
+                    - base_vertical) > 1.0f,
+          "so the vertical angle moved with it");
+
     for (int i = 0; i < kCameraMatrixFloats; ++i) {
         if (i == kProjectionHorizontal || i == kProjectionVertical) continue;
         CheckClose(camera.projection[i], clean.projection[i],
@@ -346,38 +365,47 @@ void FieldOfViewScalesTheFrustumOnly() {
     Multiply(camera.view, camera.projection, expected);
     for (int i = 0; i < kCameraMatrixFloats; ++i) {
         CheckClose(camera.view_projection[i], expected[i],
-                   "the cached view-projection carries the widened frustum");
+                   "the cached view-projection carries the new frustum");
     }
 
-    // The angle is what a player sets this for. Scaling the ANGLE instead of its
-    // tangent is a different operation and lands somewhere else - on this
-    // fixture 32.94 degrees goes to 40.55, not to the 41.17 a multiplied angle
-    // would give - and the difference only grows towards the wide end.
-    const float base = ProjectionFovDegrees(clean.projection[kProjectionVertical], 1.0f);
-    const float widened = ProjectionFovDegrees(camera.projection[kProjectionVertical], 1.0f);
-    CheckClose(widened,
-               2.0f * std::atan(1.25f * std::tan(base * 0.5f * kDegreesToRadians))
-                   * kRadiansToDegrees,
-               "the widened vertical angle is the scaled half-extent");
-    Check(std::fabs(widened - base * 1.25f) > 0.5f, "and is not the angle times the scale");
+    // An angle the game is already rendering is not a scale of 1.0002 applied to
+    // every term - it writes nothing at all, so a player who matches their game's
+    // own setting gets the engine's own matrix back byte for byte.
+    Camera matched = clean;
+    Apply(matched, HeadPose(), true, base_horizontal);
+    Check(std::memcmp(&matched, &clean, sizeof(matched)) == 0,
+          "asking for the angle the game already renders changes no renderer data");
+}
+
+// The projection is read out of the game's own camera record at an offset a
+// build profile pins. A profile that has drifted onto something else must leave
+// the camera alone rather than turn whatever is at that address into a scale.
+void FieldOfViewIgnoresAProjectionItCannotRead() {
+    std::printf("\nFov is not applied to a projection that is not a perspective one\n");
+    Camera camera = PitchedCamera();
+    camera.projection[kProjectionHorizontal] = 0.0f;
+    camera.projection[kProjectionVertical] = -3.0f;
+    const Camera clean = camera;
+    Apply(camera, HeadPose(), true, 90.0f);
+    Check(std::memcmp(&camera, &clean, sizeof(camera)) == 0,
+          "the complete camera record is unchanged");
 }
 
 void FieldOfViewAndPoseComposeTogether() {
-    std::printf("\nFovScale and a head pose apply to one camera\n");
+    std::printf("\nFov and a head pose apply to one camera\n");
     Camera camera = PitchedCamera();
     const Camera clean = camera;
     HeadPose pose;
     pose.yaw = 20.0f;
     pose.lean_x = 0.10f;
-    Apply(camera, pose, true, 0.8f);
+    Apply(camera, pose, true, 45.0f);
 
     Camera pose_only = clean;
     Apply(pose_only, pose);
     Check(std::memcmp(camera.view, pose_only.view, sizeof(camera.view)) == 0,
           "the view is exactly what the pose alone produces");
-    CheckClose(camera.projection[kProjectionVertical],
-               clean.projection[kProjectionVertical] / 0.8f,
-               "and the frustum is exactly what the scale alone produces");
+    CheckClose(camera.projection[kProjectionHorizontal], HorizontalTermFor(45.0f),
+               "and the frustum is exactly what the angle alone produces");
 
     float expected[kCameraMatrixFloats];
     Multiply(camera.view, camera.projection, expected);
@@ -395,7 +423,7 @@ void CullingContainsTheScaledView() {
         {80.0f, 40.0f, 25.0f, 0.3f, 0.2f, -0.4f},
         {-80.0f, -40.0f, -25.0f, -0.3f, -0.2f, 0.4f},
     };
-    const float scales[] = {0.5f, 1.0f, 1.6f, 2.0f};
+    const float fovs[] = {0.0f, kMinFov, 90.0f, kMaxFov};
     const bool yaw_modes[] = {false, true};
     const float depths[] = {1.0f, 100.0f, 1000.0f};
     const float edges[] = {-1.0f, 0.0f, 1.0f};
@@ -404,9 +432,9 @@ void CullingContainsTheScaledView() {
     for (const Camera& clean : cameras) {
         for (const HeadPose& pose : poses) {
             for (bool world_yaw : yaw_modes) {
-                for (float scale : scales) {
+                for (float fov : fovs) {
                     Camera rendered = clean;
-                    Apply(rendered, pose, world_yaw, scale);
+                    Apply(rendered, pose, world_yaw, fov);
                     Camera culled = rendered;
                     ExpandCullingFrustum(culled.view, culled.projection,
                                          culled.view_projection);
@@ -472,7 +500,8 @@ int main() {
     LeanMovesAlongTheCleanCameraAxes();
     ViewTranslationAndCachedProductFollowThePose();
     ZeroPoseIsByteExact();
-    FieldOfViewScalesTheFrustumOnly();
+    FieldOfViewSetsTheFrustumOnly();
+    FieldOfViewIgnoresAProjectionItCannotRead();
     FieldOfViewAndPoseComposeTogether();
     CullingContainsTheScaledView();
     return sr_test::Summary("camera transform");

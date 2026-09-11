@@ -150,9 +150,9 @@ void AcceptedValuesAreReadAndNotComplainedAbout() {
                "a configured zero smoothing is a real setting");
     Check(!Mentions(smoothing.log, "LocalSmoothing"), "and is taken silently");
 
-    const Load fov = LoadIni("[Camera]\nFovScale=1.6\n");
-    CheckClose(fov.config.fov_scale, 1.6f, "a field of view scale is read");
-    Check(!Mentions(fov.log, "FovScale"), "and is taken silently");
+    const Load fov = LoadIni("[Camera]\nFov=95\n");
+    CheckClose(fov.config.fov_degrees, 95.0f, "a field of view angle is read");
+    Check(!Mentions(fov.log, "Fov"), "and is taken silently");
 
     const Load port = LoadIni("[Network]\nUdpPort=5005\n");
     Check(port.config.udp_port == 5005, "an in-range port is read");
@@ -301,8 +301,8 @@ void BoundaryChecksStillRun() {
                "a smoothing above 1 still clamps");
     CheckClose(LoadIni("[Position]\nLimitY=-3\n").config.limit_y, 0.0f,
                "a negative limit still clamps to zero");
-    CheckClose(LoadIni("[Camera]\nFovScale=90\n").config.fov_scale, kMaxFovScale,
-               "a FovScale typed in degrees still clamps to the wide bound");
+    CheckClose(LoadIni("[Camera]\nFov=1.6\n").config.fov_degrees, kMinFov,
+               "a Fov typed as a multiplier still clamps to the narrow bound");
     CheckClose(LoadIni("[Position]\nLimitZBack=1e400\n").config.limit_z_back,
                defaults.limit_z_back,
                "a value that overflows to infinity still falls back");

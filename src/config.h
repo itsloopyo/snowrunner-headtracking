@@ -17,12 +17,12 @@ struct Config {
     std::uint16_t udp_port = 4242;
     bool enable_on_startup = true;
 
-    // SnowRunner's own Field of View settings, multiplied. The mod scales the
-    // frustum the game built rather than replacing it, so the first-person and
-    // third-person views keep the difference the game's two settings give them,
-    // and a value above 1 reaches angles those settings alone will not go to.
-    // 1.0 leaves the engine's projection untouched.
-    float fov_scale = 1.0f;
+    // The angle the frame spans across its width, in degrees, reaching well past
+    // what SnowRunner's own Field of View settings alone will go to. The mod
+    // widens or narrows the frustum the game built onto this angle every frame,
+    // so it lands there in the cabin and in the chase view alike, whatever the
+    // game's two settings are set to. 0 leaves the engine's projection untouched.
+    float fov_degrees = 0.0f;
 
     // Virtual key codes. Every action has a nav-cluster key and a
     // Ctrl+Shift+<key> chord, and both fire it - the chord is there for

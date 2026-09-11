@@ -57,18 +57,18 @@ constexpr char kDefaultIniText[] =
     "[General]\r\n"
     "EnableOnStartup=1\r\n\r\n"
     "[Camera]\r\n"
-    "; SnowRunner has its own Field of View settings, one for the cabin view and\r\n"
-    "; one for the chase view, and FovScale multiplies whichever of them the game\r\n"
-    "; is rendering with - so the two views keep the difference those settings\r\n"
-    "; give them, and either can be taken past what the game's own setting\r\n"
-    "; reaches. 1.25 puts a quarter more of the world across the frame, 0.8 shows\r\n"
-    "; less. Range 0.5 to 2.0. 1.0 leaves the game's projection untouched.\r\n"
+    "; The angle the view spans across the WIDTH of the screen, in degrees, and\r\n"
+    "; it goes well past what SnowRunner's own Field of View settings reach. 30\r\n"
+    "; to 140. The cabin and the chase view both render at this angle while it\r\n"
+    "; is set, whatever the game's own two settings are; 0 turns this off and\r\n"
+    "; leaves both of them alone.\r\n"
     ";\r\n"
-    "; This is a rendering setting rather than head tracking, so it stays applied\r\n"
-    "; while tracking is toggled off, and turning your head ten degrees turns the\r\n"
-    "; view ten degrees at every setting. HeadTracking.log names the angles it\r\n"
-    "; started from and the ones it produced.\r\n"
-    "FovScale=1.0\r\n\r\n"
+    "; HeadTracking.log names the angle the game was drawing before this\r\n"
+    "; applied, which is the number to pick yours relative to. It is a\r\n"
+    "; rendering setting rather than head tracking, so it stays applied while\r\n"
+    "; tracking is toggled off, and turning your head ten degrees turns the\r\n"
+    "; view ten degrees at every setting.\r\n"
+    "Fov=0\r\n\r\n"
     "[Hotkeys]\r\n"
     "; Windows virtual key codes, in hex. Each action has a nav-cluster key and a\r\n"
     "; Ctrl+Shift+<key> chord, and both fire it - remap either or both.\r\n"
@@ -481,7 +481,7 @@ void WarnUnknownKeys(const std::string& path, const char* section,
 void WarnUnknownKeys(const std::string& path) {
     static const char* const kNetwork[]  = { "UdpPort" };
     static const char* const kGeneral[]  = { "EnableOnStartup" };
-    static const char* const kCamera[]   = { "FovScale" };
+    static const char* const kCamera[]   = { "Fov" };
     static const char* const kHotkeys[]  = { "ToggleKey", "CycleModeKey", "YawModeKey",
                                              "ChordToggleKey", "ChordCycleModeKey",
                                              "ChordYawModeKey" };
@@ -523,8 +523,8 @@ void LoadConfig(const std::string& exe_dir, Config& out) {
 
     out.enable_on_startup  = ReadFlag(ini, kSectionGeneral, "EnableOnStartup",  out.enable_on_startup);
 
-    out.fov_scale = ReadFloatValue(ini, kSectionCamera, "FovScale", out.fov_scale,
-                                   [](float raw) { return SanitizeFovScale(raw); });
+    out.fov_degrees = ReadFloatValue(ini, kSectionCamera, "Fov", out.fov_degrees,
+                                     [](float raw) { return SanitizeFov(raw); });
 
     out.toggle_key            = ReadKey(ini, "ToggleKey",         out.toggle_key);
     out.cycle_mode_key        = ReadKey(ini, "CycleModeKey",      out.cycle_mode_key);

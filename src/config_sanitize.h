@@ -67,21 +67,22 @@ inline float SanitizeSensitivity(float v) {
     return ClampRange(SanitizeFinite(v, 1.0f), 0.0f, kMaxSensitivity);
 }
 
-// FovScale multiplies the frustum's half-extent, so the bounds are the range
-// over which the result is still a picture of the world rather than a fisheye
-// or a keyhole. What each end means depends on where the player has SnowRunner's
-// own Field of View settings, because this scales the angle those produce rather
-// than replacing it.
-//
-// The clamp also keeps the tangent bounded. Nothing in this range approaches the
+// Fov is the angle the frame spans across its width, in degrees, and 0 means
+// the game's own Field of View settings are left alone. The bounds are the range
+// over which the result is still a picture of the world rather than a fisheye or
+// a keyhole, and they keep the tangent bounded too: neither end approaches the
 // 180 degrees at which a perspective projection stops existing, so a mistyped
-// 100 lands on a wide view instead of a projection matrix full of Inf - and a
-// negative one, which would mirror the frame, lands on the narrow end.
-constexpr float kMinFovScale = 0.5f;
-constexpr float kMaxFovScale = 2.0f;
+// 900 lands on a wide view instead of a projection matrix full of Inf.
+constexpr float kMinFov = 30.0f;
+constexpr float kMaxFov = 140.0f;
 
-inline float SanitizeFovScale(float v) {
-    return ClampRange(SanitizeFinite(v, 1.0f), kMinFovScale, kMaxFovScale);
+inline float SanitizeFov(float v) {
+    // Zero is a real setting rather than a refused one, so a value at or below
+    // it lands there rather than on the narrow bound. Someone who typed a minus
+    // sign wants the game's own field of view back, not a keyhole.
+    const float finite = SanitizeFinite(v, 0.0f);
+    if (finite <= 0.0f) return 0.0f;
+    return ClampRange(finite, kMinFov, kMaxFov);
 }
 
 // A virtual key code the hotkey poller can actually watch. GetAsyncKeyState

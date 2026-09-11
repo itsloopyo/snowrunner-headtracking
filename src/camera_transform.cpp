@@ -123,10 +123,15 @@ void ApplyHeadPose(float view[kCameraMatrixFloats], float eye[3],
 void ApplyHeadPoseToRenderCamera(float view[kCameraMatrixFloats], float eye[3],
                                  float projection[kCameraMatrixFloats],
                                  float view_projection[kCameraMatrixFloats],
-                                 const HeadPose& pose, bool world_yaw, float fov_scale) {
+                                 const HeadPose& pose, bool world_yaw, float fov_degrees) {
     const bool moves_the_camera =
         pose.yaw != 0.0f || pose.pitch != 0.0f || pose.roll != 0.0f
         || pose.lean_x != 0.0f || pose.lean_y != 0.0f || pose.lean_z != 0.0f;
+    // Computed from THIS frame's projection, not once at load: the cabin and
+    // the chase view are built from separate Field of View settings, so the
+    // scale that lands on the configured angle differs between them and moves
+    // whenever the player changes either setting.
+    const float fov_scale = FovScaleForTarget(projection, fov_degrees);
     const bool widens_the_frustum = fov_scale != 1.0f;
     if (!moves_the_camera && !widens_the_frustum) return;
 
@@ -141,7 +146,7 @@ void ApplyHeadPoseToRenderCamera(float view[kCameraMatrixFloats], float eye[3],
 void ExpandCullingFrustum(const float view[kCameraMatrixFloats],
                          float projection[kCameraMatrixFloats],
                          float view_projection[kCameraMatrixFloats]) {
-    // Keep visibility planes outside the scaled view, including at maximum FovScale.
+    // Keep visibility planes outside the widened view, at every configured angle.
     ScaleProjectionFieldOfView(projection, 1.05f);
     Multiply(view, projection, view_projection);
 }

@@ -50,9 +50,10 @@ std::atomic<unsigned long long> g_last_drive_camera_tick{0};
 std::atomic<bool> g_logged_drive_camera_activity{false};
 constexpr unsigned long long kVehicleCameraActivityMs = 100;
 
-// The INI's FovScale. Written once by InstallCameraHook before the first detour
-// exists, so the render threads that read it can never see a half-built value.
-float g_fov_scale = 1.0f;
+// The INI's Fov, the angle the frame should span across its width. Written once
+// by InstallCameraHook before the first detour exists, so the render threads
+// that read it can never see a half-built value.
+float g_fov_degrees = 0.0f;
 
 std::mutex g_pose_mutex;
 HeadPose g_render_pose;
@@ -74,7 +75,7 @@ bool VehicleCameraIsActive() {
 
 // This frame's head pose, and whether the camera has to be composed at all.
 //
-// A frame with no pose still composes while FovScale is set: the field of view
+// A frame with no pose still composes while Fov is set: the field of view
 // is a rendering setting rather than head tracking, so it survives the toggle
 // hotkey, a tracker that has stopped sending and the co-op gate - all three of
 // which only decide whether a pose exists. Both stop at the same place, a frame
@@ -90,33 +91,45 @@ bool ShouldComposeCamera(std::uintptr_t caller, HeadPose& pose, bool& world_yaw)
         g_have_render_pose = PoseForThisFrame(g_render_pose);
         g_render_world_yaw = WorldYawEnabled();
     }
-    if (!g_have_render_pose) return g_fov_scale != 1.0f;
+    if (!g_have_render_pose) return g_fov_degrees > 0.0f;
     pose = g_render_pose;
     world_yaw = g_render_world_yaw;
     return true;
 }
 
-// Once, on the first projection FovScale is applied to. A scale is a number the
-// player typed, so what it is worth knowing is what it did to the angles the
-// game asked for - the same pair SnowRunner's own Field of View settings move.
+// Once, on the first camera this composes. The angles the game asked for are
+// printed whether Fov is set or not, because they are the number a player needs
+// before they can choose one - and because a Fov that reads back as the angle
+// the game was already drawing is how a setting the mod is not honouring gets
+// caught. The view drawn first is whichever the player was in, so this is the
+// cabin's angles or the chase camera's, not both.
 void LogFieldOfViewOnce(const float* projection) {
     static bool logged = false;
-    if (logged || g_fov_scale == 1.0f) return;
+    if (logged) return;
     logged = true;
 
     if (!IsReportableProjection(projection)) {
-        Log::Line("[camera] FovScale %.2f is set, but the projection at +0x%X does not read as "
-                  "a perspective one (%.4f, %.4f) - please report this with your game version",
-                  g_fov_scale, g_projection_offset, projection[kProjectionHorizontal],
+        Log::Line("[camera] the projection at +0x%X does not read as a perspective one "
+                  "(%.4f, %.4f), so Fov cannot be applied - please report this with your "
+                  "game version",
+                  g_projection_offset, projection[kProjectionHorizontal],
                   projection[kProjectionVertical]);
         return;
     }
-    Log::Line("[camera] FovScale %.2f: horizontal %.1f -> %.1f degrees, vertical %.1f -> %.1f",
-              g_fov_scale,
-              ProjectionFovDegrees(projection[kProjectionHorizontal], 1.0f),
-              ProjectionFovDegrees(projection[kProjectionHorizontal], g_fov_scale),
-              ProjectionFovDegrees(projection[kProjectionVertical], 1.0f),
-              ProjectionFovDegrees(projection[kProjectionVertical], g_fov_scale));
+    const float horizontal = ProjectionFovDegrees(projection[kProjectionHorizontal], 1.0f);
+    const float vertical = ProjectionFovDegrees(projection[kProjectionVertical], 1.0f);
+    if (g_fov_degrees <= 0.0f) {
+        Log::Line("[camera] this view renders %.1f degrees across the frame and %.1f down it; "
+                  "Fov is off, so the game's own Field of View settings are left alone",
+                  horizontal, vertical);
+        return;
+    }
+    const float scale = FovScaleForTarget(projection, g_fov_degrees);
+    Log::Line("[camera] Fov=%.1f: horizontal %.1f -> %.1f degrees, vertical %.1f -> %.1f",
+              g_fov_degrees, horizontal,
+              ProjectionFovDegrees(projection[kProjectionHorizontal], scale),
+              vertical,
+              ProjectionFovDegrees(projection[kProjectionVertical], scale));
 }
 
 void ComposeRenderCamera(std::uint8_t* bytes, const HeadPose& pose, bool world_yaw) {
@@ -130,7 +143,7 @@ void ComposeRenderCamera(std::uint8_t* bytes, const HeadPose& pose, bool world_y
     if (inverse_marker == -1) g_matrix_inverse(inverse, 0, view);
     LogFieldOfViewOnce(projection);
     ApplyHeadPoseToRenderCamera(view, eye, projection, view_projection, pose, world_yaw,
-                                g_fov_scale);
+                                g_fov_degrees);
     g_matrix_inverse(inverse, 0, view);
 }
 
@@ -185,11 +198,11 @@ bool Failed(cameraunlock::hooks::HookStatus status, const char* what) {
 
 }  // namespace
 
-bool InstallCameraHook(float fov_scale) {
+bool InstallCameraHook(float fov_degrees) {
     using cameraunlock::hooks::HookManager;
     using cameraunlock::hooks::HookStatus;
 
-    g_fov_scale = fov_scale;
+    g_fov_degrees = fov_degrees;
     const builds::BuildProfile& profile = builds::ActiveProfile();
     g_module_base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
     g_primary_return = g_module_base + profile.Offsets.render_primary_return_rva;

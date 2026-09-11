@@ -9,10 +9,11 @@ namespace sr_ht {
 // activity gates tracking out of menus. Installation failure removes all hooks
 // created here.
 //
-// `fov_scale` is the INI's FovScale, already held inside kMinFovScale..
-// kMaxFovScale by SanitizeFovScale. It is taken here rather than through a
-// setter because every hook this installs reads it, and passing it in makes the
-// one write happen before any of them can run.
-bool InstallCameraHook(float fov_scale);
+// `fov_degrees` is the INI's Fov - the angle the frame should span across its
+// width - already held at 0 or inside kMinFov..kMaxFov by SanitizeFov. It is
+// taken here rather than through a setter because every hook this installs
+// reads it, and passing it in makes the one write happen before any of them can
+// run.
+bool InstallCameraHook(float fov_degrees);
 
 }  // namespace sr_ht

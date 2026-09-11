@@ -114,26 +114,31 @@ void PositionLimitTests() {
     Check(SanitizePositionLimit(kFloatMax, 0.30f) == 0.5f, "float max clamps");
 }
 
-void FovScaleTests() {
-    std::printf("SanitizeFovScale\n");
-    Check(SanitizeFovScale(1.0f) == 1.0f, "1 passes through, and writes nothing downstream");
-    Check(SanitizeFovScale(1.6f) == 1.6f, "an in-range widening passes through");
-    Check(SanitizeFovScale(kMinFovScale) == kMinFovScale, "the narrow bound passes through");
-    Check(SanitizeFovScale(kMaxFovScale) == kMaxFovScale, "the wide bound passes through");
+void FovTests() {
+    std::printf("SanitizeFov\n");
+    Check(SanitizeFov(90.0f) == 90.0f, "an in-range angle passes through");
+    Check(SanitizeFov(kMinFov) == kMinFov, "the narrow bound passes through");
+    Check(SanitizeFov(kMaxFov) == kMaxFov, "the wide bound passes through");
 
-    // A mistyped 100 - reaching for degrees rather than a multiplier - must land
-    // on a wide view rather than on a frustum nothing can be drawn in.
-    Check(SanitizeFovScale(100.0f) == kMaxFovScale, "above the range clamps to the wide bound");
-    Check(SanitizeFovScale(0.1f) == kMinFovScale, "below it clamps to the narrow bound");
+    // Off is a setting rather than a refused value, and it is the shipped
+    // default: the game's own two Field of View settings are left alone.
+    Check(SanitizeFov(0.0f) == 0.0f, "0 passes through, and writes nothing downstream");
 
-    // Zero would divide the projection terms by nothing; a negative would mirror
-    // the frame. Both land on the narrow bound rather than reaching the matrix.
-    Check(SanitizeFovScale(0.0f) == kMinFovScale, "zero clamps rather than dividing by it");
-    Check(SanitizeFovScale(-1.5f) == kMinFovScale, "and a negative cannot mirror the frame");
+    // A multiplier typed into a key that takes degrees. 1.5 is not an angle
+    // anything can be drawn at, and landing on the narrow bound shows on screen
+    // rather than leaving the view a keyhole-shaped mystery.
+    Check(SanitizeFov(1.5f) == kMinFov, "a multiplier-shaped value clamps to the narrow bound");
+    Check(SanitizeFov(179.0f) == kMaxFov,
+          "an angle no perspective projection can draw clamps to the wide bound");
+    Check(SanitizeFov(900.0f) == kMaxFov, "and so does a mistyped one");
 
-    Check(SanitizeFovScale(kNan) == 1.0f, "a NaN falls back to 1, which writes nothing");
-    Check(SanitizeFovScale(kInf) == 1.0f, "and so does an infinity");
-    Check(SanitizeFovScale(kFloatMax) == kMaxFovScale, "the top of the float range clamps");
+    // A negative asks for the game's own field of view back, so it lands on off
+    // rather than on the narrowest view this mod can render.
+    Check(SanitizeFov(-90.0f) == 0.0f, "a negative turns the setting off");
+
+    Check(SanitizeFov(kNan) == 0.0f, "a NaN falls back to off, which writes nothing");
+    Check(SanitizeFov(kInf) == 0.0f, "and so does an infinity");
+    Check(SanitizeFov(kFloatMax) == kMaxFov, "the top of the float range clamps");
 }
 
 void VirtualKeyTests() {
@@ -198,7 +203,7 @@ int main() {
     SmoothingTests();
     SensitivityTests();
     PositionLimitTests();
-    FovScaleTests();
+    FovTests();
     VirtualKeyTests();
     UdpPortTests();
     return sr_test::Summary("config boundary");

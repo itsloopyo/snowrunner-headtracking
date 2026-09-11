@@ -49,4 +49,22 @@ inline bool IsReportableProjection(const float projection[kCameraMatrixFloats]) 
         && projection[kProjectionVertical] > 0.0f;
 }
 
+// The scale that takes the frustum the game built to `degrees` measured across
+// the WIDTH of the frame. The horizontal term already holds 1/tan(half the
+// angle the game asked for), so multiplying it by the tangent of the requested
+// half-angle is the ratio between the two tangents - which is what
+// ScaleProjectionFieldOfView wants. Scaling both terms by it keeps the aspect
+// the game built, so the vertical angle follows the screen rather than the
+// setting.
+//
+// 1.0, which writes nothing, covers both the setting being off and a projection
+// that does not read as a perspective one - a build profile whose projection
+// offset has moved would otherwise turn whatever is at that address into a
+// scale and multiply the camera by it.
+inline float FovScaleForTarget(const float projection[kCameraMatrixFloats], float degrees) {
+    if (degrees <= 0.0f || !IsReportableProjection(projection)) return 1.0f;
+    return projection[kProjectionHorizontal]
+         * std::tan(0.5f * degrees / kRadiansToDegrees);
+}
+
 }  // namespace sr_ht

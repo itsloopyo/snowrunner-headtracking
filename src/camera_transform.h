@@ -31,14 +31,16 @@ struct HeadPose {
 // camera banks with the truck, and a truck on its roof has a world up that means
 // nothing to the driver.
 //
-// `fov_scale` widens the frustum the game built, which is a separate job from
-// the pose: it changes how much of the world reaches the frame, not where the
-// camera points, so head tracking stays 1:1 at every setting. 1.0 leaves the
-// projection exactly as it arrived.
+// `fov_degrees` is the angle the frame should span across its width, and is a
+// separate job from the pose: it changes how much of the world reaches the
+// frame, not where the camera points, so head tracking stays 1:1 at every
+// setting. The frustum the game built is widened or narrowed onto that angle
+// whatever the player has SnowRunner's own Field of View settings at. 0 leaves
+// the projection exactly as it arrived.
 void ApplyHeadPoseToRenderCamera(float view[kCameraMatrixFloats], float eye[3],
                                  float projection[kCameraMatrixFloats],
                                  float view_projection[kCameraMatrixFloats],
-                                 const HeadPose& pose, bool world_yaw, float fov_scale);
+                                 const HeadPose& pose, bool world_yaw, float fov_degrees);
 
 void ExpandCullingFrustum(const float view[kCameraMatrixFloats],
                          float projection[kCameraMatrixFloats],

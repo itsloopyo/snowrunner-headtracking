@@ -325,10 +325,10 @@ void LoadAndApplyConfig(const std::string& exe_dir) {
     WriteDefaultConfigIfMissing(exe_dir);
     LoadConfig(exe_dir, g_config);
     Log::Line("[boot] config: port=%u enableOnStartup=%d localSmoothing=%.2f "
-              "remoteSmoothing=%.2f position=%d fovScale=%.2f",
+              "remoteSmoothing=%.2f position=%d fov=%.1f",
               static_cast<unsigned>(g_config.udp_port), g_config.enable_on_startup ? 1 : 0,
               g_config.local_smoothing, g_config.remote_smoothing,
-              g_config.position_enabled ? 1 : 0, g_config.fov_scale);
+              g_config.position_enabled ? 1 : 0, g_config.fov_degrees);
 
     ApplyConfigToPipeline(g_config, g_session);
     g_tracking_enabled.store(g_config.enable_on_startup);
@@ -389,7 +389,7 @@ void Bootstrap() {
     LoadAndApplyConfig(exe_dir);
     StartReceiver();
 
-    if (!InstallCameraHook(g_config.fov_scale)) {
+    if (!InstallCameraHook(g_config.fov_degrees)) {
         // Nothing will ever read the tracker now, so give the port back rather
         // than sitting on it for the rest of the session and blocking whatever
         // else the user points their tracker at.
