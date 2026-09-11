@@ -6,6 +6,9 @@
 param(
     # Positional so `deploy.ps1 "D:\Games\SnowRunner"` works, matching the
     # positional game path install.cmd takes. Named -Config stays available.
+    # With no path, every installed copy is deployed to, not just the first:
+    # owning the game on two stores is ordinary, and deploying to whichever one
+    # sorts first leaves you testing a build you did not just make.
     [Parameter(Position = 0)][string]$GamePath,
     [ValidateSet('Release', 'Debug')][string]$Config = 'Release'
 )
@@ -16,39 +19,32 @@ $ErrorActionPreference = 'Stop'
 $projectDir = Split-Path -Parent $PSScriptRoot
 
 Import-Module (Join-Path $projectDir 'cameraunlock-core/powershell/GamePathDetection.psm1') -Force
-
-if (-not $GamePath) {
-    $GamePath = Find-GamePath -GameId 'snowrunner'
-}
-if (-not $GamePath -or -not (Test-Path $GamePath)) {
-    throw "SnowRunner not found. Pass -GamePath explicitly."
-}
-
-# SnowRunner.exe lives under Sources\Bin, not the install root, and everything
-# the mod needs - the loader, the .asi, HeadTracking.ini and the log - has to
-# sit beside the exe.
-$binDir = Join-Path $GamePath 'Sources\Bin'
-if (-not (Test-Path (Join-Path $binDir 'SnowRunner.exe'))) {
-    throw "SnowRunner.exe is not at $binDir - pass the install root, not the Bin folder."
-}
-
-$asi = Join-Path $projectDir "build/$Config/SnowRunnerHeadTracking.asi"
-if (-not (Test-Path $asi)) { throw "Build output not found: $asi. Run 'pixi run build' first." }
+Import-Module (Join-Path $projectDir 'cameraunlock-core/powershell/DevDeploy.psm1') -Force
 
 $loader = Join-Path $projectDir 'vendor/ultimate-asi-loader/dinput8.dll'
 if (-not (Test-Path $loader)) { throw "Vendored ASI loader missing. Run 'pixi run update-deps'." }
 
-Copy-Item $asi (Join-Path $binDir 'SnowRunnerHeadTracking.asi') -Force
-Write-Host "  deployed SnowRunnerHeadTracking.asi" -ForegroundColor DarkGray
+# HeadTracking.ini is deliberately not deployed: it is the player's file, the
+# mod writes it itself when it is missing, and a dev loop that overwrote it
+# would throw away whatever the current test is configured to do.
+#
+# SnowRunner.exe lives under Sources\Bin rather than the install root, and it
+# imports DINPUT8.dll directly, so the loader takes that name and the
+# game-local copy wins over the system one. The Bin folder comes from
+# games.json rather than a path joined here, so a store variant that nests its
+# exe somewhere else still lands beside it.
+Invoke-DevDeployASILoader `
+    -GameId 'snowrunner' `
+    -GameDisplayName 'SnowRunner' `
+    -BuildOutputPath (Join-Path $projectDir "build/$Config") `
+    -ModDllName 'SnowRunnerHeadTracking.asi' `
+    -VendorLoaderDll $loader `
+    -AsiLoaderName 'dinput8.dll' `
+    -GivenPath $GamePath | Out-Null
 
-# SnowRunner.exe imports DINPUT8.dll directly, so the loader takes that name and
-# the game-local copy wins over the system one.
-$loaderTarget = Join-Path $binDir 'dinput8.dll'
-if (-not (Test-Path $loaderTarget)) {
-    Copy-Item $loader $loaderTarget -Force
-    Write-Host "  deployed dinput8.dll (Ultimate ASI Loader)" -ForegroundColor DarkGray
-} else {
-    Write-Host "  dinput8.dll already present, left alone" -ForegroundColor DarkGray
-}
-
-Write-Host "Deployed to $binDir" -ForegroundColor Green
+# Which copies were written, named rather than counted: one path in this list on
+# a machine with two installs is the failure this whole path exists to prevent.
+$written = @(if ($GamePath) { $GamePath } else { Find-AllGamePaths -GameId 'snowrunner' })
+Write-Host ""
+Write-Host "Deployed to $($written.Count) installation(s):" -ForegroundColor Green
+foreach ($path in $written) { Write-Host "  $path" -ForegroundColor Green }

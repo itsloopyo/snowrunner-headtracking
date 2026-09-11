@@ -36,6 +36,7 @@ set(MOD_SOURCES
     src/window_centering.cpp
     src/builds/build_registry.cpp
     src/builds/steam_offsets.cpp
+    src/builds/gdk_offsets.cpp
 )
 
 add_library(SnowRunnerHeadTracking SHARED ${MOD_SOURCES})

@@ -11,6 +11,7 @@ using cameraunlock::memory::PeFingerprint;
 namespace sr_ht::builds {
 
 const BuildProfile* const kKnownProfiles[] = {
+    &kGdkProfile_20260722,
     &kSteamProfile_20260722,
 };
 const std::size_t kKnownProfileCount = sizeof(kKnownProfiles) / sizeof(kKnownProfiles[0]);
@@ -33,7 +34,7 @@ void LogUnknownBuild(const PeFingerprint& running) {
         break;
     case FingerprintMismatch::Older:
         Log::Line("[build] this game build is OLDER than any build this mod knows about "
-                  "(newest known: %s). Let Steam finish updating the game.", primary.Name);
+                  "(newest known: %s). Let the store finish updating the game.", primary.Name);
         break;
     case FingerprintMismatch::Differs:
         Log::Line("[build] this EXE has a known build timestamp but a different size/checksum "
