@@ -13,9 +13,33 @@ An unofficial head tracking mod for SnowRunner that moves the camera with your h
 
 ## Requirements
 
-- [SnowRunner on Steam](https://store.steampowered.com/app/1465360/SnowRunner/).
+- SnowRunner on [Steam](https://store.steampowered.com/app/1465360/SnowRunner/), or on PC Game Pass / the Microsoft Store. Both are supported - see below.
 - A tracking source that sends the OpenTrack UDP protocol, such as [OpenTrack](https://github.com/opentrack/opentrack) with a webcam
 - Windows 10 or 11, 64-bit
+
+### Which copies of the game this works on
+
+The Steam build and the PC Game Pass / Microsoft Store build, both of the game
+as patched on 2026-07-22.
+
+Each store ships its own separately built exe, so the mod carries one entry per
+build and picks between them from the running exe's own PE header. A build it
+does not recognise - a patch it has not been updated for, or a store it has no
+entry for - gets no hooks at all: the game runs vanilla and the log says which
+way the mismatch went. Installing it on a copy it cannot help does not break
+that copy.
+
+Where the files go differs between the two, because the two lay their folders
+out differently:
+
+| Copy | Folder the two files go in |
+|------|----------------------------|
+| Steam | `<game>\Sources\Bin`, beside `SnowRunner.exe` |
+| Game Pass / Microsoft Store | `<drive>:\XboxGames\SnowRunner - Windows10\Content`, beside `SnowRunner.exe` |
+
+`install.cmd` finds both and puts them in the right place. Own it on both stores
+and it installs into whichever one it finds first, so run it once per copy,
+passing the path as an argument for the second.
 
 ## Installation
 
@@ -27,9 +51,9 @@ An unofficial head tracking mod for SnowRunner that moves the camera with your h
 
 The installer puts two files next to `SnowRunner.exe`: `SnowRunnerHeadTracking.asi` (the mod) and `dinput8.dll` (the bundled Ultimate ASI Loader, which the game already imports so the loader is picked up on start).
 
-`SnowRunner.exe` is not at the top of the game folder - it lives in `Sources\Bin`, and that is where both files go. The loader only ever looks in the directory the exe is in, so a copy anywhere else does nothing at all.
+`SnowRunner.exe` is not at the top of the Steam game folder - it lives in `Sources\Bin`, and that is where both files go. The Game Pass copy keeps it at the root of `Content` instead. The loader only ever looks in the directory the exe is in, so a copy anywhere else does nothing at all.
 
-Success looks like a `HeadTracking.ini` and a `HeadTracking.log` appearing in `Sources\Bin` after the first launch, with the log reading `[build] activated profile steam-win64-20260722` and a `[camera] hooked the drive camera update at ...` line.
+Success looks like a `HeadTracking.ini` and a `HeadTracking.log` appearing beside `SnowRunner.exe` after the first launch, with the log reading `[build] activated profile steam-win64-20260722` (or `gdk-win64-20260722` on Game Pass) and a `[camera] hooked vehicle activity at ...` line.
 
 If the installer cannot find your game, point it at the folder yourself, either with an environment variable:
 
@@ -44,11 +68,11 @@ or by passing the path as an argument:
 .\install.cmd "D:\Games\SnowRunner"
 ```
 
-Either way, give it the folder that contains `Sources`, not the `Bin` folder itself.
+On Steam, give it the folder that contains `Sources`, not the `Bin` folder itself. On Game Pass, give it the `Content` folder, which is the one `SnowRunner.exe` sits in.
 
 ### Manual Installation
 
-Copy `plugins\SnowRunnerHeadTracking.asi` and `vendor\ultimate-asi-loader\dinput8.dll` out of the ZIP into the folder holding `SnowRunner.exe` - `<game>\Sources\Bin`. The loader keeps its name; nothing needs renaming.
+Copy `plugins\SnowRunnerHeadTracking.asi` and `vendor\ultimate-asi-loader\dinput8.dll` out of the ZIP into the folder holding `SnowRunner.exe` - `<game>\Sources\Bin` on Steam, `<drive>:\XboxGames\SnowRunner - Windows10\Content` on Game Pass. The loader keeps its name; nothing needs renaming.
 
 Mod managers do not deploy this mod. A manager installs into one fixed subtree of the game folder, and SnowRunner's own mod support goes through the in-game Mod Browser, which handles maps and trucks rather than files beside the exe. There is no Nexus archive for this mod for that reason - use `install.cmd`, or copy the two files by hand.
 
@@ -107,7 +131,7 @@ Centering is done in the tracker: OpenTrack's Center bind, the center button in 
 
 ## Configuration
 
-`HeadTracking.ini` is written next to `SnowRunner.exe`, in `Sources\Bin`, on first run and read at startup. Edit it and restart the game. Every key it holds, with the shipped default:
+`HeadTracking.ini` is written next to `SnowRunner.exe` on first run and read at startup. Edit it and restart the game. Every key it holds, with the shipped default:
 
 ```ini
 [Network]
@@ -119,10 +143,9 @@ UdpPort=4242
 EnableOnStartup=1
 
 [Camera]
-; Multiplies the field of view the game is rendering with. 1.25 puts a quarter
-; more of the world across the frame, 0.8 shows less. Range 0.5 to 2.0, and 1.0
-; leaves the game's own projection untouched.
-FovScale=1.0
+; Field of view, in degrees across the width of the screen. 30 to 140.
+; 0 keeps the game's own Field of View settings.
+Fov=0
 
 [Hotkeys]
 ; Windows virtual key codes, in hex. A value the mod cannot bind leaves that
@@ -166,17 +189,21 @@ LimitZ=0.40
 LimitZBack=0.10
 ```
 
-`FovScale` is the one setting worth a second line. SnowRunner has its own Field of View settings, one for the cabin view and one for the chase view, and this multiplies whichever of the two the game is rendering with - so both views keep the difference those settings give them, and either can be taken past what the game's own setting reaches. `HeadTracking.log` names the angles it started from and the ones it produced. It is a rendering setting rather than head tracking: it stays applied while tracking is toggled off, and turning your head ten degrees turns the view ten degrees at every setting.
+`Fov` is the one setting worth a second line. Type the angle you want across the width of the screen and the mod renders it, reaching well past what SnowRunner's own Field of View settings go to. It applies to the cabin view and the chase view alike, so while it is set the two render at the same angle rather than at the two the game's own settings give them; `Fov=0` hands both back.
+
+`HeadTracking.log` names the angle the game was drawing before the mod touched it, on a line that starts `[camera]`, and that is the number to pick yours relative to. It depends on where your own Field of View settings are and on which view was on screen first.
+
+The vertical angle follows your screen's shape, so an ultrawide asking for the same number gets a wider picture rather than a differently shaped one. It is a rendering setting rather than head tracking: it stays applied while tracking is toggled off, and turning your head ten degrees turns the view ten degrees at every setting.
 
 The mod picks between the two smoothing values by where the packets came from, and it goes by address rather than by machine. Any `127.x.x.x` address counts as local. A phone on your WiFi gets `RemoteSmoothing`, which is what you want, but so does OpenTrack running on this same PC if you have pointed it at your PC's own network address. Send to a loopback address to get `LocalSmoothing`.
 
 ## Troubleshooting
 
-Read `HeadTracking.log`, next to `SnowRunner.exe` in `Sources\Bin`. It records the game folder, the build profile it matched or refused, the config it loaded, the camera update it hooked, and the first head pose that reached the camera.
+Read `HeadTracking.log`, next to `SnowRunner.exe`. It records the game folder, the build profile it matched or refused, the config it loaded, the camera update it hooked, and the first head pose that reached the camera.
 
 **Mod not loading:**
 
-- No log file at all means the loader is not being picked up. Check that `dinput8.dll` and `SnowRunnerHeadTracking.asi` are both in `Sources\Bin`, beside `SnowRunner.exe`, and not in the folder above it.
+- No log file at all means the loader is not being picked up. Check that `dinput8.dll` and `SnowRunnerHeadTracking.asi` are both beside `SnowRunner.exe` - `Sources\Bin` on Steam, `Content` on Game Pass - and not in the folder above it.
 - If the log says the mod stayed dormant, your `SnowRunner.exe` is not a build this mod has a profile for. The mod fingerprints the running exe (TimeDateStamp, SizeOfImage and CheckSum) and installs no hooks unless it matches. The log line says whether your build is newer or older than the ones it knows; a newer one needs a mod update.
 
 **No tracking response:**
