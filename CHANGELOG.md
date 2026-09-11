@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0] - 2026-09-11
+
+### Added
+
+- add a FovScale setting that widens the view past the game's own limit
+- set the field of view in degrees instead of as a multiplier
+- support the PC Game Pass build
+
+### Fixed
+
+- stop scenery vanishing at the edges of a head-turned or widened view
+- stop a white glare column sliding in from the edge opposite a head turn
+- turn the view rays and visibility bounds with the head
+
 ## [0.0.0] - 2026-09-06
 
 ### Added
