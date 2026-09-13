@@ -43,6 +43,13 @@ passing the path as an argument for the second.
 
 ## Installation
 
+### Lopari
+
+Download [Lopari](https://lopari.app), choose **SnowRunner**, and click
+**Play with head tracking**.
+
+### Standalone Installer
+
 1. Download the `SnowRunnerHeadTracking-...-installer.zip` from the [releases page](https://github.com/itsloopyo/snowrunner-headtracking/releases).
 2. Extract it anywhere.
 3. Double-click `install.cmd`.
