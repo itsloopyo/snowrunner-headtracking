@@ -13,13 +13,13 @@ An unofficial head tracking mod for SnowRunner that moves the camera with your h
 
 ## Requirements
 
-- SnowRunner on [Steam](https://store.steampowered.com/app/1465360/SnowRunner/), or on PC Game Pass / the Microsoft Store. Both are supported - see below.
+- SnowRunner on [Steam](https://store.steampowered.com/app/1465360/SnowRunner/), or on Xbox Game Pass. Both are supported - see below.
 - A tracking source that sends the OpenTrack UDP protocol, such as [OpenTrack](https://github.com/opentrack/opentrack) with a webcam
 - Windows 10 or 11, 64-bit
 
 ### Which copies of the game this works on
 
-The Steam build and the PC Game Pass / Microsoft Store build, both of the game
+The Steam build and the Xbox Game Pass build, both of the game
 as patched on 2026-07-22.
 
 Each store ships its own separately built exe, so the mod carries one entry per
@@ -35,7 +35,7 @@ out differently:
 | Copy | Folder the two files go in |
 |------|----------------------------|
 | Steam | `<game>\Sources\Bin`, beside `SnowRunner.exe` |
-| Game Pass / Microsoft Store | `<drive>:\XboxGames\SnowRunner - Windows10\Content`, beside `SnowRunner.exe` |
+| Xbox Game Pass | `<drive>:\XboxGames\SnowRunner - Windows10\Content`, beside `SnowRunner.exe` |
 
 `install.cmd` finds both and puts them in the right place. Own it on both stores
 and it installs into whichever one it finds first, so run it once per copy,
@@ -58,9 +58,9 @@ Download [Lopari](https://lopari.app), choose **SnowRunner**, and click
 
 The installer puts two files next to `SnowRunner.exe`: `SnowRunnerHeadTracking.asi` (the mod) and `dinput8.dll` (the bundled Ultimate ASI Loader, which the game already imports so the loader is picked up on start).
 
-`SnowRunner.exe` is not at the top of the Steam game folder - it lives in `Sources\Bin`, and that is where both files go. The Game Pass copy keeps it at the root of `Content` instead. The loader only ever looks in the directory the exe is in, so a copy anywhere else does nothing at all.
+`SnowRunner.exe` is not at the top of the Steam game folder - it lives in `Sources\Bin`, and that is where both files go. The Xbox Game Pass copy keeps it at the root of `Content` instead. The loader only ever looks in the directory the exe is in, so a copy anywhere else does nothing at all.
 
-Success looks like a `HeadTracking.ini` and a `HeadTracking.log` appearing beside `SnowRunner.exe` after the first launch, with the log reading `[build] activated profile steam-win64-20260722` (or `gdk-win64-20260722` on Game Pass) and a `[camera] hooked vehicle activity at ...` line.
+Success looks like a `HeadTracking.ini` and a `HeadTracking.log` appearing beside `SnowRunner.exe` after the first launch, with the log reading `[build] activated profile steam-win64-20260722` (or `gdk-win64-20260722` on Xbox Game Pass) and a `[camera] hooked vehicle activity at ...` line.
 
 If the installer cannot find your game, point it at the folder yourself, either with an environment variable:
 
@@ -75,11 +75,11 @@ or by passing the path as an argument:
 .\install.cmd "D:\Games\SnowRunner"
 ```
 
-On Steam, give it the folder that contains `Sources`, not the `Bin` folder itself. On Game Pass, give it the `Content` folder, which is the one `SnowRunner.exe` sits in.
+On Steam, give it the folder that contains `Sources`, not the `Bin` folder itself. On Xbox Game Pass, give it the `Content` folder, which is the one `SnowRunner.exe` sits in.
 
 ### Manual Installation
 
-Copy `plugins\SnowRunnerHeadTracking.asi` and `vendor\ultimate-asi-loader\dinput8.dll` out of the ZIP into the folder holding `SnowRunner.exe` - `<game>\Sources\Bin` on Steam, `<drive>:\XboxGames\SnowRunner - Windows10\Content` on Game Pass. The loader keeps its name; nothing needs renaming.
+Copy `plugins\SnowRunnerHeadTracking.asi` and `vendor\ultimate-asi-loader\dinput8.dll` out of the ZIP into the folder holding `SnowRunner.exe` - `<game>\Sources\Bin` on Steam, `<drive>:\XboxGames\SnowRunner - Windows10\Content` on Xbox Game Pass. The loader keeps its name; nothing needs renaming.
 
 Mod managers do not deploy this mod. A manager installs into one fixed subtree of the game folder, and SnowRunner's own mod support goes through the in-game Mod Browser, which handles maps and trucks rather than files beside the exe. There is no Nexus archive for this mod for that reason - use `install.cmd`, or copy the two files by hand.
 
@@ -215,7 +215,7 @@ Read `HeadTracking.log`, next to `SnowRunner.exe`. It records the game folder, t
 
 **Mod not loading:**
 
-- No log file at all means the loader is not being picked up. Check that `dinput8.dll` and `SnowRunnerHeadTracking.asi` are both beside `SnowRunner.exe` - `Sources\Bin` on Steam, `Content` on Game Pass - and not in the folder above it.
+- No log file at all means the loader is not being picked up. Check that `dinput8.dll` and `SnowRunnerHeadTracking.asi` are both beside `SnowRunner.exe` - `Sources\Bin` on Steam, `Content` on Xbox Game Pass - and not in the folder above it.
 - If the log says the mod stayed dormant, your `SnowRunner.exe` is not a build this mod has a profile for. The mod fingerprints the running exe (TimeDateStamp, SizeOfImage and CheckSum) and installs no hooks unless it matches. The log line says whether your build is newer or older than the ones it knows; a newer one needs a mod update.
 
 **No tracking response:**
