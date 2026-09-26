@@ -33,7 +33,6 @@ set(MOD_SOURCES
     src/camera_hook.cpp
     src/camera_transform.cpp
     src/game_state.cpp
-    src/hotkey_names.cpp
     src/window_centering.cpp
     src/builds/build_registry.cpp
     src/builds/steam_offsets.cpp
@@ -104,22 +103,18 @@ if(SR_BUILD_TESTS)
     target_link_libraries(sr_game_state_tests PRIVATE cameraunlock cameraunlock_hooks
                           cameraunlock_discovery)
 
-    # Where the log and the INI land. The mod calls cameraunlock::os for this
+    # Where the log and the config land. The mod calls cameraunlock::os for this
     # rather than carrying its own copy, so this locks the contract the bootstrap
     # depends on. The running test EXE stands in for the game.
     sr_add_test(exe_paths)
     target_link_libraries(sr_exe_paths_tests PRIVATE cameraunlock)
 
-    # The one log line that reports which keys the config landed on. What a key
-    # is called is the keyboard layout's business; that a name is always produced
-    # is this mod's.
-    sr_add_test(hotkey_names src/hotkey_names.cpp)
-
-    # Exercises the real INI generator and the frozen loader, so it needs the
-    # core's IniReader and the log sink both write their diagnostics to.
-    sr_add_test(config_defaults src/config.cpp src/legacy_config/legacy_config.cpp)
-    target_link_libraries(sr_config_defaults_tests PRIVATE cameraunlock)
-    target_compile_definitions(sr_config_defaults_tests PRIVATE
+    # The committed config against the table's fresh render, the fleet's
+    # default hotkeys, the mode cycle's and the yaw toggle's saves, and Fov's
+    # range. `sr_config_tests --render-config <path>` is pixi run render-config.
+    sr_add_test(config src/config.cpp src/legacy_config/legacy_config.cpp)
+    target_link_libraries(sr_config_tests PRIVATE cameraunlock)
+    target_compile_definitions(sr_config_tests PRIVATE
         SR_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
     # The hotkey half of the frozen loader: which INI values reach a binding and
@@ -135,11 +130,13 @@ if(SR_BUILD_TESTS)
     # The canonical config conversion's differential test: v0.2.0's reader and
     # startup code (the oracle, compiled from byte copies in
     # tests/config_differential/oracle) against the frozen reader in
-    # src/legacy_config/.
+    # src/legacy_config/, and that against the config owner's migration into
+    # CameraUnlock.ini.
     set(SR_DIFFERENTIAL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential)
     add_executable(sr_config_differential
         ${SR_DIFFERENTIAL_DIR}/differential_tests.cpp
         ${SR_DIFFERENTIAL_DIR}/oracle/oracle_reader.cpp
+        src/config.cpp
         src/legacy_config/legacy_config.cpp
     )
     target_include_directories(sr_config_differential PRIVATE
@@ -157,6 +154,12 @@ if(SR_BUILD_TESTS)
     endif()
     add_test(NAME config_differential COMMAND sr_config_differential)
     set_property(GLOBAL APPEND PROPERTY SR_TEST_TARGETS sr_config_differential)
+    # Core's canonical config lint over the committed file and every file the
+    # differential test migrated, which it writes beside itself under migrated/.
+    add_test(NAME config_lint COMMAND node
+             ${SR_DIFFERENTIAL_DIR}/lint-migrated.mjs
+             $<TARGET_FILE_DIR:sr_config_differential>/migrated)
+    set_tests_properties(config_lint PROPERTIES DEPENDS config_differential)
 
     # What the differential test compiles is pinned by hash, line endings aside:
     # the oracle's byte copies must stay v0.2.0's (git show v0.2.0:src/<file>),

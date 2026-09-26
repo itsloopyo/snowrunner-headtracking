@@ -24,9 +24,9 @@ Import-Module (Join-Path $projectDir 'cameraunlock-core/powershell/DevDeploy.psm
 $loader = Join-Path $projectDir 'vendor/ultimate-asi-loader/dinput8.dll'
 if (-not (Test-Path $loader)) { throw "Vendored ASI loader missing. Run 'pixi run update-deps'." }
 
-# HeadTracking.ini is deliberately not deployed: it is the player's file, the
-# mod writes it itself when it is missing, and a dev loop that overwrote it
-# would throw away whatever the current test is configured to do.
+# No config is deployed: the mod creates CameraUnlock.ini itself when it is
+# missing, importing HeadTracking.ini, which it never writes, and a dev loop that
+# copied either would throw away whatever the current test is configured to do.
 #
 # SnowRunner.exe lives under Sources\Bin rather than the install root, and it
 # imports DINPUT8.dll directly, so the loader takes that name and the

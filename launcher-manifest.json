@@ -8,6 +8,14 @@
   "strategy": "AsiLoader",
   "delivery_mode": "manifest",
 
+  "config": {
+    "path": "CameraUnlock.ini",
+    "anchor": "exe_dir",
+    "legacy_source": "HeadTracking.ini",
+    "canonical_since": "0.3.0",
+    "per_game": {}
+  },
+
   "files": [
     { "source": "vendor/ultimate-asi-loader/dinput8.dll", "target": "Sources/Bin/dinput8.dll", "backup": true },
     { "source": "plugins/SnowRunnerHeadTracking.asi", "target": "Sources/Bin/SnowRunnerHeadTracking.asi" }

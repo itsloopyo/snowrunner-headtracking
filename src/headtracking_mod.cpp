@@ -5,22 +5,26 @@
 
 #include <windows.h>
 
-#include <array>
 #include <atomic>
 #include <cmath>
+#include <filesystem>
+#include <functional>
+#include <stdexcept>
 #include <string>
+#include <utility>
 
 #include "builds/build_registry.h"
 #include "camera_hook.h"
 #include "camera_transform.h"
 #include "config.h"
 #include "game_state.h"
-#include "hotkey_names.h"
 #include "logging.h"
 #include "window_centering.h"
 
-#include "cameraunlock/input/chord_hotkeys.h"
+#include "cameraunlock/config/defaults_file.h"
 #include "cameraunlock/input/hotkey_poller.h"
+#include "cameraunlock/input/key_binding_registration.h"
+#include "cameraunlock/input/key_bindings.h"
 #include "cameraunlock/math/smoothing_utils.h"
 #include "cameraunlock/os/module_paths.h"
 #include "cameraunlock/protocol/udp_receiver.h"
@@ -64,19 +68,13 @@ std::atomic<bool> g_pinned{false};
 // Config to pipeline
 // ---------------------------------------------------------------------------
 
-// Translation only, from the INI-backed Config into the core pipeline's own
-// settings types. Both arguments are explicit rather than reaching for the file
-// statics, so this reads as - and can be reasoned about as - a mapping with no
-// other reach into the mod's state.
+// Translation only, from the settings into the core pipeline's own settings
+// types. Both arguments are explicit rather than reaching for the file statics,
+// so this reads as - and can be reasoned about as - a mapping with no other
+// reach into the mod's state. The processor keeps its default sensitivity,
+// which applies the pose as the tracker sends it; the engine's axis signs are
+// ApplyHeadPose's.
 void ApplyConfigToPipeline(const Config& config, Session& session) {
-    cameraunlock::SensitivitySettings sensitivity;
-    sensitivity.yaw = config.yaw_sensitivity;
-    sensitivity.pitch = config.pitch_sensitivity;
-    sensitivity.roll = config.roll_sensitivity;
-    sensitivity.invert_yaw = config.invert_yaw;
-    sensitivity.invert_pitch = config.invert_pitch;
-    sensitivity.invert_roll = config.invert_roll;
-    session.GetProcessor().SetSensitivity(sensitivity);
 
     // One pair of values for rotation and position alike. The session owns them
     // and recomposes them onto whatever position settings it is handed, so the
@@ -86,16 +84,9 @@ void ApplyConfigToPipeline(const Config& config, Session& session) {
     session.SetLocalSmoothing(config.local_smoothing);
     session.SetRemoteSmoothing(config.remote_smoothing);
 
-    session.SetPositionSettings(cameraunlock::PositionSettings::Symmetric(
-        config.position_sensitivity_x,
-        config.position_sensitivity_y,
-        config.position_sensitivity_z,
-        config.limit_x, config.limit_y, config.limit_z, config.limit_z_back,
-        config.local_smoothing, config.remote_smoothing,
-        config.invert_position_x, config.invert_position_y, config.invert_position_z));
+    session.SetPositionSettings(config::ToPositionSettings(config));
 
-    session.SetMode(config.position_enabled ? cameraunlock::TrackingMode::RotationAndPosition
-                                            : cameraunlock::TrackingMode::RotationOnly);
+    session.SetMode(config::StartupTrackingMode(config));
 }
 
 // ---------------------------------------------------------------------------
@@ -228,81 +219,64 @@ void ToggleTracking() {
     Log::Line("[input] tracking %s", on ? "enabled" : "disabled");
 }
 
-// World up by default. The chase camera looks down at the truck, and yawing
-// about its own up axis in that attitude sweeps the view around a cone instead
-// of turning it. Camera-local is the other position because the cabin camera
-// banks with the truck, and a truck that has landed on its roof has a world up
-// that means nothing to the driver.
+// World up or the camera's own up axis, from WorldSpaceYaw at startup. The
+// chase camera looks down at the truck, and yawing about its own up axis in that
+// attitude sweeps the view around a cone instead of turning it. Camera-local is
+// the other position because the cabin camera banks with the truck, and a truck
+// that has landed on its roof has a world up that means nothing to the driver.
 std::atomic<bool> g_world_yaw{true};
 
+// Runs on the hotkey poller's thread: the camera takes the new yaw mode first,
+// then CameraUnlock.ini saves it, so the next start begins in it.
 void ToggleYawMode() {
     const bool world = !g_world_yaw.load();
     g_world_yaw.store(world);
     Log::Line("[input] head yaw turns about %s", world ? "world up" : "the camera's own up axis");
+    config::SaveWorldSpaceYaw(world);
 }
 
-void CycleTrackingMode() {
-    const char* name = "";
-    switch (g_session.CycleMode()) {
-        case cameraunlock::TrackingMode::RotationAndPosition: name = "rotation and position"; break;
-        case cameraunlock::TrackingMode::RotationOnly:        name = "rotation only"; break;
-        case cameraunlock::TrackingMode::PositionOnly:        name = "position only"; break;
+const char* ModeName(cameraunlock::TrackingMode mode) {
+    switch (mode) {
+        case cameraunlock::TrackingMode::RotationAndPosition: return "rotation and position";
+        case cameraunlock::TrackingMode::RotationOnly:        return "rotation only";
+        case cameraunlock::TrackingMode::PositionOnly:        return "position only";
     }
-    Log::Line("[input] tracking mode: %s", name);
+    throw std::logic_error("TrackingMode outside its three modes");
 }
 
-// Every action is reachable two ways: its nav-cluster key, and the
-// Ctrl+Shift+<letter> chord for keyboards without a nav cluster. Pairing them in
-// one row is what keeps the two lists from drifting apart, and the line that
-// tells the user which keys they ended up on is built from these same rows.
-struct HotkeyBinding {
-    const char* action;
-    int nav_key;
-    int chord_key;
-    void (*handler)();
-};
+// Runs on the hotkey poller's thread: the session takes the new mode first, then
+// CameraUnlock.ini saves it, so the next start begins in it.
+void CycleTrackingMode() {
+    const cameraunlock::TrackingMode mode = g_session.CycleMode();
+    Log::Line("[input] tracking mode: %s", ModeName(mode));
+    config::SaveTrackingMode(mode);
+}
 
-std::array<HotkeyBinding, 3> Bindings(const Config& config) {
-    return {{
-        { "toggle tracking",     config.toggle_key,     config.chord_toggle_key,     ToggleTracking },
-        { "cycle tracking mode", config.cycle_mode_key, config.chord_cycle_mode_key, CycleTrackingMode },
-        { "toggle yaw mode",     config.yaw_mode_key,   config.chord_yaw_mode_key,   ToggleYawMode },
-    }};
+// The table's hotkey codec lets only a list ParseKeyBindings reads into the
+// settings.
+void RegisterList(const std::string& list, std::function<void()> action) {
+    const cameraunlock::input::KeyBindingsParseResult parsed = cameraunlock::input::ParseKeyBindings(list);
+    if (!parsed.ok()) throw std::logic_error("hotkey list '" + list + "': " + parsed.error);
+    cameraunlock::input::RegisterKeyBindings(g_hotkeys, parsed.bindings, std::move(action));
 }
 
 void RegisterHotkeys(const Config& config) {
-    using namespace cameraunlock::input;
-    for (const HotkeyBinding& binding : Bindings(config)) {
-        g_hotkeys.AddHotkey(binding.nav_key, NavGuarded(binding.handler));
-        g_hotkeys.AddHotkey(binding.chord_key, ChordGuarded(binding.handler));
-    }
+    RegisterList(config.toggle_key, ToggleTracking);
+    RegisterList(config.cycle_tracking_mode_key, CycleTrackingMode);
+    RegisterList(config.yaw_mode_key, ToggleYawMode);
     g_hotkeys.Start();
-}
-
-void LogHotkeys(const Config& config) {
-    std::string ready = "[boot] ready.";
-    for (const HotkeyBinding& binding : Bindings(config)) {
-        ready += " " + HotkeyName(binding.nav_key) + "/Ctrl+Shift+"
-               + HotkeyName(binding.chord_key) + " " + binding.action + ",";
-    }
-    ready.back() = '.';
-
-    // Through %s, never as the format itself: the names come from the keyboard
-    // layout, and a layout that names a key with a '%' would otherwise turn this
-    // line into a format string reading arguments that were never passed.
-    Log::Line("%s", ready.c_str());
 }
 
 // ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
 
-bool OpenLogAndResolveGameDirectory(std::string& exe_dir) {
+bool OpenLogAndResolveGameDirectory(std::wstring& exe_dir_wide, std::string& exe_dir) {
     // The core's resolver rather than a local copy of it: it grows its buffer
     // past MAX_PATH, so a game under a long install path resolves instead of
     // leaving the mod dormant, and it refuses a best-fit ANSI narrowing rather
     // than handing back the name of a different directory that happens to exist.
-    const std::wstring exe_dir_wide = cameraunlock::os::HostExeDirectory();
+    exe_dir_wide = cameraunlock::os::HostExeDirectory();
 
     // Beside the game EXE, not in the process working directory: a launcher can
     // start the game from anywhere, and a bare relative name then drops the log
@@ -311,8 +285,10 @@ bool OpenLogAndResolveGameDirectory(std::string& exe_dir) {
                                    : exe_dir_wide + L"\\HeadTracking.log");
     Log::Line("=== SnowRunner Head Tracking ===");
 
-    // The INI layer is ANSI-only (IniReader wraps GetPrivateProfile*A), so a
-    // directory with no ANSI form is as unusable as one that would not resolve.
+    // The log's lines take narrow text, and every earlier build stayed dormant
+    // on a directory with no ANSI form, since its HeadTracking.ini reader was
+    // ANSI-only. The frozen import of that file still is, so this stays as it
+    // was.
     if (exe_dir_wide.empty() || !cameraunlock::os::NarrowToAnsi(exe_dir_wide, exe_dir)) {
         Log::Line("[boot] could not resolve the game directory - mod is dormant, game runs vanilla.");
         return false;
@@ -321,17 +297,18 @@ bool OpenLogAndResolveGameDirectory(std::string& exe_dir) {
     return true;
 }
 
-void LoadAndApplyConfig(const std::string& exe_dir) {
-    WriteDefaultConfigIfMissing(exe_dir);
-    g_config = LoadConfig(exe_dir);
+void LoadAndApplyConfig(const std::wstring& exe_dir) {
+    g_config = config::Load(std::filesystem::path(exe_dir), cameraunlock::config::DefaultsFile::PerUser());
     Log::Line("[boot] config: port=%u enableOnStartup=%d localSmoothing=%.2f "
-              "remoteSmoothing=%.2f position=%d fov=%.1f",
+              "remoteSmoothing=%.2f mode=%s worldSpaceYaw=%d fov=%.1f",
               static_cast<unsigned>(g_config.udp_port), g_config.enable_on_startup ? 1 : 0,
               g_config.local_smoothing, g_config.remote_smoothing,
-              g_config.position_enabled ? 1 : 0, g_config.fov_degrees);
+              ModeName(config::StartupTrackingMode(g_config)), g_config.world_space_yaw ? 1 : 0,
+              g_config.fov_degrees);
 
     ApplyConfigToPipeline(g_config, g_session);
     g_tracking_enabled.store(g_config.enable_on_startup);
+    g_world_yaw.store(g_config.world_space_yaw);
 }
 
 void StartReceiver() {
@@ -360,8 +337,9 @@ bool PinModule() {
 }
 
 void Bootstrap() {
+    std::wstring exe_dir_wide;
     std::string exe_dir;
-    if (!OpenLogAndResolveGameDirectory(exe_dir)) return;
+    if (!OpenLogAndResolveGameDirectory(exe_dir_wide, exe_dir)) return;
 
     // Before any hook goes in, and fatal rather than advisory. An inline detour
     // in the game's camera update outlives an unload: a thread can be executing
@@ -386,7 +364,7 @@ void Bootstrap() {
         return;
     }
 
-    LoadAndApplyConfig(exe_dir);
+    LoadAndApplyConfig(exe_dir_wide);
     StartReceiver();
 
     if (!InstallCameraHook(g_config.fov_degrees)) {
@@ -401,7 +379,9 @@ void Bootstrap() {
 
     RegisterHotkeys(g_config);
     g_active.store(true, std::memory_order_release);
-    LogHotkeys(g_config);
+    Log::Line("[boot] ready. %s toggle tracking, %s cycle tracking mode, %s toggle yaw mode.",
+              g_config.toggle_key.c_str(), g_config.cycle_tracking_mode_key.c_str(),
+              g_config.yaw_mode_key.c_str());
 
     // Last, because it blocks for as long as the engine takes to place its
     // window: the hook, the receiver and the hotkeys are all live before this
@@ -457,7 +437,7 @@ void Initialize() {
     g_pinned.store(PinModule());
 
     // On a new thread: DllMain runs under the loader lock, so the bootstrap
-    // (which opens a log, reads the INI and resolves engine classes) cannot run
+    // (which opens a log, reads the config and resolves engine classes) cannot run
     // here. CreateThread rather than std::thread because this is DllMain - a
     // std::thread that cannot start throws std::system_error, and an exception
     // leaving DllMain calls std::terminate before the log is even open, killing

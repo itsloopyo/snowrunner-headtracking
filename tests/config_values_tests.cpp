@@ -4,7 +4,7 @@
 // What the frozen HeadTracking.ini reader does with a value it cannot use, and -
 // the half that had no cover at all - whether it SAYS so.
 //
-// The value side was already right: every reader in IniReader answers
+// The value side was already right: core's INI reader answers
 // unparseable text with the fallback its caller passed, and the loader passes
 // the value the Config already holds, so a refused key keeps what it had. What
 // was missing was the diagnostic. A refused value looked exactly like a key the
@@ -12,8 +12,8 @@
 // and nothing to triage from, while every other refusal in the reader - a bad
 // port, a bad hotkey, an out-of-range float - reported itself.
 //
-// The trap is a bool with a trailing comment. GetPrivateProfileString does not
-// treat ';' as a comment introducer and ReadBool matches the WHOLE value, so
+// The trap is a bool with a trailing comment. Windows' INI API does not
+// treat ';' as a comment introducer and the bool reader matches the WHOLE value, so
 // `Enabled=0 ; no lean` matches nothing and position tracking stays on.
 //
 // The other half of this file is the regression risk the fix carries: the
@@ -258,7 +258,7 @@ void AKeyTheModDoesNotReadIsCalledOut() {
     Check(!Mentions(clean.log, "is not a key"), "a file of known keys draws no complaint");
 
     // A commented-out key must not be reported as an unknown one.
-    // GetPrivateProfileSectionA drops ';' lines but hands back '#' lines
+    // Windows' section read drops ';' lines but hands back '#' lines
     // verbatim, and this mod honours '#' as a comment introducer everywhere
     // else - so the unknown-key walk has to skip them itself. Without that,
     // `# LimitX=0.25 was my old value` produced a confident complaint about a
@@ -322,7 +322,7 @@ void BoundaryChecksStillRun() {
 
 void ThePortRefusalNamesTheRightFault() {
     // ReadInt answers a present-but-unparseable value with 0 rather than the
-    // fallback (IniReader's header, rule 4), and NormalizeUdpPort then refuses
+    // fallback (core's INI reader header, rule 4), and NormalizeUdpPort then refuses
     // that 0 for being out of range. Reporting it as a range problem sends the
     // user to check the one thing that was never wrong.
     std::printf("A refused UdpPort says which of the two faults it was\n");

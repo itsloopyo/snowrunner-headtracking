@@ -2,8 +2,6 @@
 *.cmd text eol=crlf
 *.bat text eol=crlf
 *.ps1 text eol=crlf
-# The mod writes HeadTracking.ini with CRLF and the user edits it in place;
-# checking it out as LF would make the reference copy differ from the shipped one.
 *.ini text eol=crlf
 *.dll binary
 *.asi binary
@@ -11,3 +9,5 @@
 *.gif binary
 tests/config_differential/data/** -text
 tests/config_differential/oracle/src/** -text
+# The committed CameraUnlock.ini, byte for byte the config table's fresh render.
+HeadTracking.ini -text

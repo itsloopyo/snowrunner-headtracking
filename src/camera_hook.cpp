@@ -54,7 +54,7 @@ std::atomic<unsigned long long> g_last_drive_camera_tick{0};
 std::atomic<bool> g_logged_drive_camera_activity{false};
 constexpr unsigned long long kVehicleCameraActivityMs = 100;
 
-// The INI's Fov, the angle the frame should span across its width. Written once
+// CameraUnlock.ini's Fov, the angle the frame should span across its width. Written once
 // by InstallCameraHook before the first detour exists, so the render threads
 // that read it can never see a half-built value.
 float g_fov_degrees = 0.0f;
