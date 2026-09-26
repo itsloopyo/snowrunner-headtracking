@@ -103,7 +103,7 @@ Set OpenTrack's **Input** to `Neuralnet tracker`. It tracks your face from a pla
 
 ### Phone App Setup
 
-Your app has to send the OpenTrack UDP protocol, either from the phone or through a companion program on the PC. Many phone trackers use something else, so check that first.
+The mod takes the OpenTrack UDP protocol and nothing else, so your app has to send that, either from the phone or through a companion program on the PC. Check your app's output settings for it first.
 
 There are two ways to wire it up:
 
