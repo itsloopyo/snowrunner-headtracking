@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 itsloopyo
 
-// What HeadTracking.ini does with a value the mod cannot use, and - the half
-// that had no cover at all - whether it SAYS so.
+// What the frozen HeadTracking.ini reader does with a value it cannot use, and -
+// the half that had no cover at all - whether it SAYS so.
 //
 // The value side was already right: every reader in IniReader answers
 // unparseable text with the fallback its caller passed, and the loader passes
 // the value the Config already holds, so a refused key keeps what it had. What
 // was missing was the diagnostic. A refused value looked exactly like a key the
 // user never wrote, so "my INI setting is ignored" arrived with an empty log
-// and nothing to triage from, while every other refusal in config.cpp - a bad
+// and nothing to triage from, while every other refusal in the reader - a bad
 // port, a bad hotkey, an out-of-range float - reported itself.
 //
 // The trap is a bool with a trailing comment. GetPrivateProfileString does not
@@ -19,8 +19,8 @@
 // The other half of this file is the regression risk the fix carries: the
 // detector must not cry wolf on values that are perfectly legitimate.
 
-#include "config.h"
-#include "config_sanitize.h"
+#include "legacy_config/legacy_config.h"
+#include "legacy_config/config_sanitize.h"
 #include "logging.h"
 
 #include "ini_fixture.h"
@@ -32,7 +32,8 @@
 #include <share.h>
 #include <string>
 
-using namespace sr_ht;
+using namespace sr_ht::legacy;
+namespace Log = sr_ht::Log;
 using sr_test::Check;
 using sr_test::CheckClose;
 
@@ -40,7 +41,7 @@ namespace {
 
 std::string g_dir;
 
-// Opens the log config.cpp writes its refusals to, inside the fixture's
+// Opens the log the reader writes its refusals to, inside the fixture's
 // directory, so the checks below can read back what a load said.
 //
 // Widened through the API rather than by copying chars: a temp path under a
@@ -87,7 +88,7 @@ Load LoadIni(const char* body) {
     if (!sr_test::WriteIni(g_dir, body)) return {};
 
     Load result;
-    LoadConfig(g_dir, result.config);
+    LoadConfig(sr_test::IniPathIn(g_dir), result.config);
     result.log = ReadWholeLog().substr(logBefore);
     return result;
 }

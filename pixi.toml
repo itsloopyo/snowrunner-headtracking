@@ -33,15 +33,18 @@ clean-all = { cmd = """
     powershell -Command "foreach ($d in @('build','build-tests','release')) { if (Test-Path $d) { Remove-Item $d -Recurse -Force } }; Write-Host 'All build artifacts cleaned' -ForegroundColor Green"
 """ }
 
-# Unit tests: the HeadTracking.ini boundary, the shipped defaults, the camera
-# transform composition, the aim projection and the gameplay gate. Builds in
-# build-tests/ so the packaged build/ tree never contains a test binary.
+# Unit tests: the camera transform composition, the gameplay gate, the frozen
+# HeadTracking.ini reader, and the config differential test, which holds that
+# reader to v0.2.0's. Builds in build-tests/ so the packaged build/ tree never
+# contains a test binary. Needs no game install.
 test = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/run-tests.ps1" }
 
 # Bump the vendored Ultimate ASI Loader copy. Manual; commit the result.
 update-deps = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/update-deps.ps1" }
 
-package = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["build"] }
+# Depends on test, so no ZIP is built from a tree whose tests or config
+# differential test fail.
+package = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["build", "test"] }
 
 # Dev loop: build, then copy the .asi + vendored loader straight into the
 # detected game folder. install.cmd is the end-user path and is not run here -
@@ -58,4 +61,6 @@ release = "powershell -ExecutionPolicy Bypass -File scripts/release.ps1"
 check-fingerprint = "powershell -ExecutionPolicy Bypass -File scripts/check-fingerprint.ps1"
 
 [dependencies]
-# No pixi-managed deps - relies on system CMake + Visual Studio.
+# The build uses the system CMake and Visual Studio. Packaging runs core's config
+# descriptor check (Copy-SharedBundle) with node.
+nodejs = "==26.5.0"

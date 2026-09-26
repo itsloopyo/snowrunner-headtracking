@@ -8,7 +8,7 @@
 // rather than on nothing, which is the difference between one hotkey not moving
 // and a hotkey silently disappearing.
 
-#include "config.h"
+#include "legacy_config/legacy_config.h"
 
 #include "ini_fixture.h"
 #include "test_support.h"
@@ -16,7 +16,7 @@
 #include <cstdio>
 #include <string>
 
-using namespace sr_ht;
+using namespace sr_ht::legacy;
 using sr_test::Check;
 
 namespace {
@@ -29,7 +29,7 @@ Config Load(const char* body) {
     if (!sr_test::WriteIni(g_dir, body)) return Config{};
 
     Config cfg;
-    LoadConfig(g_dir, cfg);
+    LoadConfig(sr_test::IniPathIn(g_dir), cfg);
     return cfg;
 }
 

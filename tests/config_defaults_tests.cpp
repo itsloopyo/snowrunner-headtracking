@@ -11,6 +11,7 @@
 // real loader.
 
 #include "config.h"
+#include "legacy_config/legacy_config.h"
 
 #include "ini_fixture.h"
 #include "test_support.h"
@@ -26,9 +27,10 @@ using sr_test::CheckClose;
 
 namespace {
 
-// Every field of Config, compared against a default-constructed one. Loading a
-// file that says exactly what the defaults say must leave the struct untouched.
-void CheckMatchesDefaults(const Config& cfg, const char* source) {
+// Every field the frozen reader filled, compared against a default-constructed
+// runtime Config. Loading a file that says exactly what the defaults say must
+// leave the struct at the shipped defaults.
+void CheckMatchesDefaults(const legacy::Config& cfg, const char* source) {
     const Config defaults;
     std::printf("%s\n", source);
 
@@ -75,8 +77,8 @@ void CheckMatchesDefaults(const Config& cfg, const char* source) {
 // on the way in would land back on something legal and could mask the very drift
 // this is looking for. The hotkeys are four bindable codes, all distinct, so
 // RefuseCollidingHotkeys has nothing to say about them.
-Config Poisoned() {
-    Config cfg;
+legacy::Config Poisoned() {
+    legacy::Config cfg;
     cfg.udp_port = 5555;
     cfg.enable_on_startup = false;
     cfg.fov_degrees = 95.0f;
@@ -144,8 +146,8 @@ void GeneratedDefaultsTests() {
     Check(GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES,
           "is written when none exists");
 
-    Config cfg = Poisoned();
-    LoadConfig(dir, cfg);
+    legacy::Config cfg = Poisoned();
+    legacy::LoadConfig(path, cfg);
     CheckMatchesDefaults(cfg, "The generated file loads back as the built-in defaults");
 
     CheckReferenceIniIsByteIdentical(path);
@@ -159,8 +161,8 @@ void GeneratedDefaultsTests() {
         std::fclose(f);
     }
     WriteDefaultConfigIfMissing(dir);
-    Config edited;
-    LoadConfig(dir, edited);
+    legacy::Config edited;
+    legacy::LoadConfig(path, edited);
     Check(edited.udp_port == 5000, "an existing HeadTracking.ini is never overwritten");
 
     sr_test::RemoveTempDir(dir);
@@ -171,9 +173,15 @@ void ReferenceIniTests() {
     // that ships as documentation lives. Poisoned in every field, so a key
     // MISSING from that file fails here instead of comparing equal to the
     // default it was never read into.
-    Config cfg = Poisoned();
-    LoadConfig(SR_SOURCE_DIR, cfg);
+    legacy::Config cfg = Poisoned();
+    legacy::LoadConfig(std::string(SR_SOURCE_DIR) + "\\HeadTracking.ini", cfg);
     CheckMatchesDefaults(cfg, "The reference HeadTracking.ini at the repo root");
+}
+
+void FrozenDefaultsTests() {
+    // The frozen reader starts from its own copy of the defaults, so a file
+    // with no keys at all has to mean what it meant to the runtime Config.
+    CheckMatchesDefaults(legacy::Config{}, "The frozen reader's defaults");
 }
 
 }  // namespace
@@ -183,5 +191,6 @@ int main() {
     std::printf("=====================================================\n");
     GeneratedDefaultsTests();
     ReferenceIniTests();
+    FrozenDefaultsTests();
     return sr_test::Summary("config defaults");
 }

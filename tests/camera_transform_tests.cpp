@@ -3,7 +3,7 @@
 
 #include "camera_fov.h"
 #include "camera_transform.h"
-#include "config_sanitize.h"
+#include "legacy_config/config_sanitize.h"
 
 #include "test_support.h"
 
@@ -425,7 +425,7 @@ void CullingContainsTheScaledView() {
         {80.0f, 40.0f, 25.0f, 0.3f, 0.2f, -0.4f},
         {-80.0f, -40.0f, -25.0f, -0.3f, -0.2f, 0.4f},
     };
-    const float fovs[] = {0.0f, kMinFov, 90.0f, kMaxFov};
+    const float fovs[] = {0.0f, legacy::kMinFov, 90.0f, legacy::kMaxFov};
     const bool yaw_modes[] = {false, true};
     const float depths[] = {1.0f, 100.0f, 1000.0f};
     const float edges[] = {-1.0f, 0.0f, 1.0f};

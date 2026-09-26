@@ -10,7 +10,7 @@ namespace sr_ht {
 // created here.
 //
 // `fov_degrees` is the INI's Fov - the angle the frame should span across its
-// width - already held at 0 or inside kMinFov..kMaxFov by SanitizeFov. It is
+// width - already held at 0 or inside 30..140 by the reader's SanitizeFov. It is
 // taken here rather than through a setter because every hook this installs
 // reads it, and passing it in makes the one write happen before any of them can
 // run.
