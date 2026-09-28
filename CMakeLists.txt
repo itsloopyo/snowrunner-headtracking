@@ -160,6 +160,7 @@ if(SR_BUILD_TESTS)
              ${SR_DIFFERENTIAL_DIR}/lint-migrated.mjs
              $<TARGET_FILE_DIR:sr_config_differential>/migrated)
     set_tests_properties(config_lint PROPERTIES DEPENDS config_differential)
+    set_tests_properties(config_differential config_lint PROPERTIES LABELS differential)
 
     # What the differential test compiles is pinned by hash, line endings aside:
     # the oracle's byte copies must stay v0.2.0's (git show v0.2.0:src/<file>),

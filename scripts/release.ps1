@@ -60,6 +60,18 @@ if ($branch -ne "main") { throw "Releases must run on 'main' (currently on '$bra
 if (-not (Test-CleanGitStatus)) { throw "Working tree is not clean. Commit or stash first." }
 if (Test-GitTagExists -Tag "v$newVersion") { throw "Tag v$newVersion already exists." }
 
+Write-Host "Running the full test suite..." -ForegroundColor Cyan
+Push-Location $projectDir
+try {
+    pixi run test
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Error: pixi run test failed. Nothing was changed." -ForegroundColor Red
+        exit 1
+    }
+} finally {
+    Pop-Location
+}
+
 # THIRD-PARTY-NOTICES.md names the cameraunlock-core commit compiled into the
 # release ZIPs, and bumping the submodule does not touch it. Packaging refuses
 # to ship that mismatch, so a bump with no notices edit stopped the release
@@ -127,10 +139,6 @@ Write-Utf8NoBom $manifestPath $manifestContent
 #    superset of compiling. Running only `pixi run build` here meant a release
 #    could be tagged and pushed and then fail in CI at packaging, stranding the
 #    tag and the version-bump commit on main with no GitHub Release behind them.
-Write-Host "Running tests..." -ForegroundColor Cyan
-pixi run test
-if ($LASTEXITCODE -ne 0) { throw "Tests failed; aborting release." }
-
 Write-Host "Building and packaging release..." -ForegroundColor Cyan
 pixi run package
 if ($LASTEXITCODE -ne 0) { throw "Packaging failed; aborting release." }
