@@ -63,15 +63,3 @@ jobs:
             Write-Host "::error::No installer ZIP was produced by 'pixi run package'"
             exit 1
           }
-
-      # The one supported way to hand a tester a build. Pushing a scratch branch
-      # to a public repo is forbidden and cutting a real release for one person
-      # is worse, so without this there was no route at all for "try this build
-      # and tell me whether your game build is recognised".
-      - name: Upload installer
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: SnowRunnerHeadTracking-installer
-          path: release/*-installer.zip
-          if-no-files-found: error
-          retention-days: 14
