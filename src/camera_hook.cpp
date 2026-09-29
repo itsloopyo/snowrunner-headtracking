@@ -108,9 +108,9 @@ bool ShouldComposeCamera(std::uintptr_t caller, HeadPose& pose, bool& world_yaw)
 // caught. The view drawn first is whichever the player was in, so this is the
 // cabin's angles or the chase camera's, not both.
 void LogFieldOfViewOnce(const float* projection) {
-    static bool logged = false;
-    if (logged) return;
-    logged = true;
+    // Atomic because every detour composes on whichever render thread calls it.
+    static std::atomic<bool> logged{false};
+    if (logged.exchange(true, std::memory_order_relaxed)) return;
 
     if (!IsReportableProjection(projection)) {
         Log::Line("[camera] the projection at +0x%X does not read as a perspective one "
@@ -141,15 +141,13 @@ void ComposeRenderCamera(std::uint8_t* bytes, const HeadPose& pose, bool world_y
     auto* const projection = reinterpret_cast<float*>(bytes + g_projection_offset);
     auto* const eye = reinterpret_cast<float*>(bytes + g_eye_offset);
     auto* const view_projection = reinterpret_cast<float*>(bytes + g_view_projection_offset);
-    auto* const inverse = bytes + g_inverse_view_offset;
-    std::int32_t inverse_marker;
-    std::memcpy(&inverse_marker, inverse, sizeof(inverse_marker));
-    if (inverse_marker == -1) g_matrix_inverse(inverse, 0, view);
     LogFieldOfViewOnce(projection);
     ApplyHeadPoseToRenderCamera(view, eye, projection, view_projection,
                                 *reinterpret_cast<float*>(bytes + g_vertical_fov_offset),
                                 pose, world_yaw, g_fov_degrees);
-    g_matrix_inverse(inverse, 0, view);
+    // The inverse routine writes all sixteen floats without reading the cache's
+    // -1 dirty marker, so this one call both rebuilds and clears it.
+    g_matrix_inverse(bytes + g_inverse_view_offset, 0, view);
 }
 
 void* __fastcall CameraFrustumDetour(void* camera, void* output, float far_plane) {
@@ -241,6 +239,13 @@ bool Failed(cameraunlock::hooks::HookStatus status, const char* what) {
     return true;
 }
 
+struct CameraHook {
+    const char* what;
+    std::uintptr_t rva;
+    void* detour;
+    void** original;
+};
+
 }  // namespace
 
 bool InstallCameraHook(float fov_degrees) {
@@ -263,12 +268,25 @@ bool InstallCameraHook(float fov_degrees) {
     g_vertical_fov_offset = profile.Offsets.render_vertical_fov;
     g_motion_blur_rays_return = g_module_base + profile.Offsets.motion_blur_rays_return_rva;
 
-    void* const drive_target = reinterpret_cast<void*>(
-        g_module_base + profile.Offsets.drive_camera_update_rva);
-    void* const render_target = reinterpret_cast<void*>(
-        g_module_base + profile.Offsets.render_camera_upload_rva);
-    void* const frustum_target = reinterpret_cast<void*>(
-        g_module_base + profile.Offsets.camera_frustum_rva);
+    const CameraHook camera_hooks[] = {
+        {"hooking the vehicle camera update", profile.Offsets.drive_camera_update_rva,
+         reinterpret_cast<void*>(&DriveCameraUpdateDetour),
+         reinterpret_cast<void**>(&g_original_drive_camera_update)},
+        {"hooking the render camera upload", profile.Offsets.render_camera_upload_rva,
+         reinterpret_cast<void*>(&RenderCameraUploadDetour),
+         reinterpret_cast<void**>(&g_original_render_camera_upload)},
+        {"hooking camera visibility", profile.Offsets.camera_frustum_rva,
+         reinterpret_cast<void*>(&CameraFrustumDetour),
+         reinterpret_cast<void**>(&g_original_camera_frustum)},
+        {"hooking view rays", profile.Offsets.camera_view_rays_rva,
+         reinterpret_cast<void*>(&ViewRaysDetour),
+         reinterpret_cast<void**>(&g_original_view_rays)},
+        {"hooking visibility bounds", profile.Offsets.camera_bounds_rva,
+         reinterpret_cast<void*>(&BoundsDetour),
+         reinterpret_cast<void**>(&g_original_bounds)},
+    };
+    constexpr std::size_t kHookCount = sizeof(camera_hooks) / sizeof(camera_hooks[0]);
+    void* targets[kHookCount]{};
 
     HookManager& hooks = HookManager::Instance();
     const HookStatus initialized = hooks.Initialize();
@@ -277,49 +295,33 @@ bool InstallCameraHook(float fov_degrees) {
         return false;
     }
 
-    cameraunlock::hooks::ScopedHook drive_hook;
-    cameraunlock::hooks::ScopedHook render_hook;
-    cameraunlock::hooks::ScopedHook frustum_hook;
-    if (Failed(drive_hook.Create(drive_target, reinterpret_cast<void*>(&DriveCameraUpdateDetour),
-                                reinterpret_cast<void**>(&g_original_drive_camera_update)),
-               "hooking the vehicle camera update")) {
+    // Every hook is created before any is enabled. Removing a hook that is
+    // already live frees its trampoline under a render thread that may be inside
+    // the detour on its way to calling it, so a failure here must only ever undo
+    // hooks no thread has entered. Enabling them together also means no frame is
+    // composed by some of these detours and culled by the originals.
+    for (std::size_t i = 0; i < kHookCount; ++i) {
+        void* const target = reinterpret_cast<void*>(g_module_base + camera_hooks[i].rva);
+        if (Failed(hooks.CreateHook(target, camera_hooks[i].detour, camera_hooks[i].original),
+                   camera_hooks[i].what)) {
+            for (std::size_t created = 0; created < i; ++created) hooks.RemoveHook(targets[created]);
+            return false;
+        }
+        targets[i] = target;
+    }
+
+    // One thread freeze for all five; the co-op gate's hooks are already live and
+    // MinHook skips them. Disabled rather than removed on failure: a partial
+    // enable can leave a thread inside a detour, and disabling keeps its
+    // trampoline valid.
+    if (Failed(hooks.EnableAllHooks(), "enabling the camera hooks")) {
+        for (void* const target : targets) hooks.DisableHook(target);
         return false;
     }
-    if (Failed(render_hook.Create(render_target, reinterpret_cast<void*>(&RenderCameraUploadDetour),
-                                reinterpret_cast<void**>(&g_original_render_camera_upload)),
-               "hooking the render camera upload")) {
-        return false;
-    }
-    if (Failed(frustum_hook.Create(frustum_target, reinterpret_cast<void*>(&CameraFrustumDetour),
-                                  reinterpret_cast<void**>(&g_original_camera_frustum)),
-               "hooking camera visibility")) {
-        return false;
-    }
-    cameraunlock::hooks::ScopedHook rays_hook;
-    cameraunlock::hooks::ScopedHook bounds_hook;
-    void* const rays_target = reinterpret_cast<void*>(
-        g_module_base + profile.Offsets.camera_view_rays_rva);
-    void* const bounds_target = reinterpret_cast<void*>(
-        g_module_base + profile.Offsets.camera_bounds_rva);
-    if (Failed(rays_hook.Create(rays_target, reinterpret_cast<void*>(&ViewRaysDetour),
-                               reinterpret_cast<void**>(&g_original_view_rays)),
-               "hooking view rays")) {
-        return false;
-    }
-    if (Failed(bounds_hook.Create(bounds_target, reinterpret_cast<void*>(&BoundsDetour),
-                                 reinterpret_cast<void**>(&g_original_bounds)),
-               "hooking visibility bounds")) {
-        return false;
-    }
-    rays_hook.Release();
-    bounds_hook.Release();
-    drive_hook.Release();
-    render_hook.Release();
-    frustum_hook.Release();
 
     Log::Line("[camera] hooked vehicle activity at 0x%p, player render upload at 0x%p "
-              "and visibility at 0x%p, bounds at 0x%p, view rays at 0x%p (profile %s)",
-              drive_target, render_target, frustum_target, bounds_target, rays_target, profile.Name);
+              "and visibility at 0x%p, view rays at 0x%p, bounds at 0x%p (profile %s)",
+              targets[0], targets[1], targets[2], targets[3], targets[4], profile.Name);
     return true;
 }
 
