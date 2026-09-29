@@ -244,10 +244,18 @@ const char* ModeName(cameraunlock::TrackingMode mode) {
     throw std::logic_error("TrackingMode outside its three modes");
 }
 
-// Runs on the hotkey poller's thread: the session takes the new mode first, then
-// CameraUnlock.ini saves it, so the next start begins in it.
+// The mode the render thread applies at its next pose. A mode change resets the
+// position interpolator and smoothing, which the render thread is stepping in
+// Update, so the poller thread only ever writes this and never the session.
+std::atomic<int> g_desired_mode{static_cast<int>(cameraunlock::TrackingMode::RotationAndPosition)};
+
+// Runs on the hotkey poller's thread. The next mode is taken from the one the
+// render thread last applied, so two presses before a frame are one step, and
+// CameraUnlock.ini saves it so the next start begins in it.
 void CycleTrackingMode() {
-    const cameraunlock::TrackingMode mode = g_session.CycleMode();
+    const auto mode = static_cast<cameraunlock::TrackingMode>(
+        (static_cast<int>(g_session.GetMode()) + 1) % 3);
+    g_desired_mode.store(static_cast<int>(mode), std::memory_order_relaxed);
     Log::Line("[input] tracking mode: %s", ModeName(mode));
     config::SaveTrackingMode(mode);
 }
@@ -307,6 +315,7 @@ void LoadAndApplyConfig(const std::wstring& exe_dir) {
               g_config.fov_degrees);
 
     ApplyConfigToPipeline(g_config, g_session);
+    g_desired_mode.store(static_cast<int>(g_session.GetMode()));
     g_tracking_enabled.store(g_config.enable_on_startup);
     g_world_yaw.store(g_config.world_space_yaw);
 }
@@ -398,6 +407,8 @@ bool WorldYawEnabled() { return g_world_yaw.load(std::memory_order_relaxed); }
 bool PoseForThisFrame(HeadPose& pose) {
     if (!g_active.load(std::memory_order_acquire)) return false;
 
+    g_session.SetMode(static_cast<cameraunlock::TrackingMode>(
+        g_desired_mode.load(std::memory_order_relaxed)));
     const float dt = g_frame_clock.Tick();
 
     // The pipeline advances whatever the gate says. Freezing it in a menu and
