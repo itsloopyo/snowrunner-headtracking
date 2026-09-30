@@ -49,6 +49,7 @@ void LogUnknownBuild(const PeFingerprint& running) {
 const BuildProfile& ActiveProfile() { return *g_active; }
 
 ProfileSelection SelectProfile(void* moduleBase) {
+    g_active = nullptr;
     PeFingerprint running{};
     if (!cameraunlock::memory::ReadPeFingerprint(moduleBase, running)) {
         Log::Line("[build] could not read PE headers of the running module; staying dormant");

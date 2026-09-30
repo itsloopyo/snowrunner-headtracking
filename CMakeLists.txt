@@ -93,6 +93,9 @@ if(SR_BUILD_TESTS)
     # The frozen reader's value guards - headers only, nothing to link.
     sr_add_test(config_sanitize)
 
+    sr_add_test(build_registry src/builds/steam_offsets.cpp src/builds/gdk_offsets.cpp)
+    target_link_libraries(sr_build_registry_tests PRIVATE cameraunlock)
+
     # The camera composition, compiled straight from the production translation
     # unit: axis signs, camera-local rotation, body-frame lean, and the numbers
     # the running game was measured producing.
