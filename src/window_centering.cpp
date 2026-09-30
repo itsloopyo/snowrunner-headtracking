@@ -4,51 +4,19 @@
 #include "window_centering.h"
 
 #include <windows.h>
-
 #include <cstdlib>
 
 #include "logging.h"
-
 #include "cameraunlock/os/game_window.h"
 
 namespace sr_ht {
-
 namespace {
 
-namespace os = cameraunlock::os;
-
 constexpr int kPollIntervalMs = 250;
-constexpr int kPollAttempts = 240;  // 60s, which covers a cold start off a hard disk.
-
-// The rect has to hold still before it is worth acting on. The window is up well
-// before the engine has finished sizing and placing it, and when the engine
-// stops moving it has not been measured here, so the wait is on three seconds of
-// an unchanged rect rather than on a fixed delay that would be a guess.
+constexpr int kPollAttempts = 240;
 constexpr int kSettlePolls = 12;
 
-// The core's diagnostics carry their own "window:" topic, so they land under the
-// same [boot] tag as everything else the bootstrap says.
-void ForwardWindowLog(os::WindowLogLevel level, const char* message) {
-    Log::Line("[boot] %s%s", level == os::WindowLogLevel::Warning ? "WARNING: " : "", message);
-}
-
-int CenteredOrigin(int area_start, int area_extent, int window_extent) {
-    return area_start + (area_extent - window_extent) / 2;
-}
-
-bool IsCenteredOn(const RECT& window, const RECT& area) {
-    // A game that centres its own window rounds the odd half-pixel up where the
-    // integer maths here rounds it down, so an exact comparison would move the
-    // window one pixel and report that as a fix.
-    constexpr int kTolerance = 2;
-    const int dx = window.left
-                 - CenteredOrigin(area.left, area.right - area.left, window.right - window.left);
-    const int dy = window.top
-                 - CenteredOrigin(area.top, area.bottom - area.top, window.bottom - window.top);
-    return std::abs(dx) <= kTolerance && std::abs(dy) <= kTolerance;
-}
-
-void CenterUnlessAlready(HWND window, const RECT& rect) {
+void CenterWindow(HWND window, const RECT& rect) {
     MONITORINFO info{};
     info.cbSize = sizeof(info);
     if (!GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &info)) {
@@ -56,65 +24,67 @@ void CenterUnlessAlready(HWND window, const RECT& rect) {
         return;
     }
 
-    // Either reading counts as centred. A game centres on the monitor, this mod
-    // centres on the work area, and the two differ by half the taskbar. Moving a
-    // window that is already centred trades a visible jump for nothing, and a
-    // fullscreen or borderless window is centred by definition, which is how it
-    // is left alone here.
-    if (IsCenteredOn(rect, info.rcWork) || IsCenteredOn(rect, info.rcMonitor)) {
-        Log::Line("[boot] window: %dx%d at (%d, %d) is already centred, leaving it alone",
-                  static_cast<int>(rect.right - rect.left),
-                  static_cast<int>(rect.bottom - rect.top),
-                  static_cast<int>(rect.left), static_cast<int>(rect.top));
+    // A window spanning the entire monitor is fullscreen or borderless.
+    if (rect.left <= info.rcMonitor.left && rect.top <= info.rcMonitor.top &&
+        rect.right >= info.rcMonitor.right && rect.bottom >= info.rcMonitor.bottom) return;
+
+    const LONG width = rect.right - rect.left;
+    const LONG height = rect.bottom - rect.top;
+    const LONG x = info.rcWork.left + (info.rcWork.right - info.rcWork.left - width) / 2;
+    const LONG y = info.rcWork.top + (info.rcWork.bottom - info.rcWork.top - height) / 2;
+    if (std::abs(rect.left - x) <= 2 && std::abs(rect.top - y) <= 2) return;
+
+    if (!SetWindowPos(window, nullptr, x, y, 0, 0,
+                      SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)) {
+        Log::Line("[boot] WARNING: window: SetWindowPos failed: %lu", GetLastError());
         return;
     }
-
-    os::CenterGameWindowOnce(&ForwardWindowLog);
-}
-
-// Waits for a game window whose rect has held still for kSettlePolls, writing it
-// and that rect to the out-params. False when none settled in time, in which
-// case the out-params are left alone.
-bool WaitForSettledWindow(HWND& settled, RECT& settled_rect) {
-    RECT previous{};
-    bool have_previous = false;
-    int stable_polls = 0;
-
-    for (int attempt = 0; attempt < kPollAttempts; ++attempt) {
-        Sleep(kPollIntervalMs);
-
-        const HWND window = os::FindGameWindow();
-        RECT current{};
-        if (!window || !GetWindowRect(window, &current)) {
-            have_previous = false;
-            stable_polls = 0;
-            continue;
-        }
-
-        if (have_previous && EqualRect(&previous, &current)) {
-            if (++stable_polls < kSettlePolls) continue;
-            settled = window;
-            settled_rect = current;
-            return true;
-        }
-        previous = current;
-        have_previous = true;
-        stable_polls = 0;
-    }
-    return false;
+    Log::Line("[boot] window: centered %ldx%ld at (%ld, %ld)", width, height, x, y);
 }
 
 }  // namespace
 
 void CenterWindowWhenReady() {
-    HWND window = nullptr;
-    RECT rect{};
-    if (!WaitForSettledWindow(window, rect)) {
-        Log::Line("[boot] window: no window settled within %ds, leaving placement alone",
-                  kPollAttempts * kPollIntervalMs / 1000);
-        return;
+    HWND previous_window = nullptr;
+    RECT previous{};
+    HWND handled_window = nullptr;
+    LONG handled_width = 0;
+    LONG handled_height = 0;
+    int stable_polls = 0;
+
+    // Keep watching through startup: the initial window may settle before the
+    // engine applies the player's resolution. Position-only changes after
+    // centering are left alone so the player can still drag the window.
+    for (int attempt = 0; attempt < kPollAttempts; ++attempt) {
+        Sleep(kPollIntervalMs);
+        const HWND window = cameraunlock::os::FindGameWindow();
+        RECT current{};
+        if (!window || IsIconic(window) || IsZoomed(window)) {
+            previous_window = nullptr;
+            stable_polls = 0;
+            continue;
+        }
+        if (!GetWindowRect(window, &current)) {
+            Log::Line("[boot] WARNING: window: GetWindowRect failed: %lu", GetLastError());
+            return;
+        }
+        if (window != previous_window || !EqualRect(&previous, &current)) {
+            previous_window = window;
+            previous = current;
+            stable_polls = 0;
+            continue;
+        }
+        if (stable_polls < kSettlePolls) ++stable_polls;
+        if (stable_polls != kSettlePolls) continue;
+
+        const LONG width = current.right - current.left;
+        const LONG height = current.bottom - current.top;
+        if (window == handled_window && width == handled_width && height == handled_height) continue;
+        CenterWindow(window, current);
+        handled_window = window;
+        handled_width = width;
+        handled_height = height;
     }
-    CenterUnlessAlready(window, rect);
 }
 
 }  // namespace sr_ht
