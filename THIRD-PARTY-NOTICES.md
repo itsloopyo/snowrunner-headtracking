@@ -261,7 +261,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - **License:** BSD-2-Clause
 - **Upstream:** https://github.com/TsudaKageyu/minhook (bundled by MinHook
   upstream)
-- **Usage:** Length disassembly for MinHook's trampoline construction.
+- **Usage:** Instruction decoding for MinHook's trampoline construction and
+  the mod's runtime call-graph validation.
   Compiled into the `.asi`.
 - **Bundled:** yes, statically linked into `SnowRunnerHeadTracking.asi`.
 
@@ -346,31 +347,26 @@ SOFTWARE.
 ## SnowRunner and the Saber3D engine
 
 - **Version:** not applicable. No game code, asset or data file is included.
-- **Usage:** The mod attaches to the running game and writes to one camera
-  transform inside it. Nothing is copied out.
+- **Usage:** The mod supplies private camera-record copies to the game's
+  rendering and visibility functions.
 - **Bundled:** no.
 
-The engine details recorded in this mod's source are listed below in full,
-because a reader has to be able to check them, and because naming them is what
-makes the boundary auditable. Every one of them is an observation of the
-shipped executable as it runs - the class names come from the MSVC RTTI that
-executable carries, and the numbers from watching which bytes the rendered view
-followed:
+The engine names, layouts and function relationships below come from observations
+of the shipped executables and running game. Class names come from MSVC RTTI;
+field layouts and camera behavior were measured locally.
 
-- The camera transform the mod writes is a field inside
-  `combine::combineDriveCameraAction`, and the function that computes it is that
-  class's fifth virtual. The address of that function and the byte offset of
-  that field, for one build of the game, are what `src/builds/` holds.
-- That class is recorded as the drive camera's Havok physics action, which is
-  what makes it the thing that runs every frame. Naming the middleware is a
-  statement about the game, not about this mod: no Havok code, header, library
-  or SDK is used, linked or shipped here.
-- The transform is a row-major 4x4 with the camera's basis in rows 0 to 2 and
-  its world position in row 3. That layout was read off a live matrix, not taken
-  from any published source.
-- One further class name appears, and only as the reason the camera is pinned by
-  address rather than resolved by name: `DRIVE_CAMERA`, whose vtable holds only
-  thunks and none of whose slots runs per frame. No address for it is recorded.
+- `combine::combineDriveCameraAction` supplies the vehicle-activity signal.
+  Its update function is pinned separately for the supported Steam and GDK builds.
+- The player render-camera record contains row-major view, projection,
+  inverse-view and view-projection matrices, an eye vector and a vertical FOV
+  scalar. The view matrix's first three columns hold the world-space camera
+  basis. The profiles also identify upload, visibility-frustum, visibility-bounds,
+  view-ray and inverse-matrix functions and two caller filters.
+- The names `MotionBlur` and `MotionBlurMSStencilMasked` identify a rendering
+  pass. Decoded call relationships connect that pass to the player-camera getter
+  and four-vector ray builder. Scalar accesses and the inverse-cache call
+  corroborate its layout. Historical profiles cross-check the result; the
+  remaining camera dependencies still require an exact profile match.
 - The class the co-op gate watches is `netREDSTONE_SESSION`, which the mod
   resolves by name at runtime. No address for it is recorded anywhere in this
   repository either; the mod reads the vtable out of the running process and

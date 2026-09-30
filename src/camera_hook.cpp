@@ -12,6 +12,7 @@
 #include <mutex>
 
 #include "builds/build_registry.h"
+#include "builds/render_discovery.h"
 #include "camera_fov.h"
 #include "camera_transform.h"
 #include "headtracking_mod.h"
@@ -254,10 +255,34 @@ bool InstallCameraHook(float fov_degrees) {
 
     g_fov_degrees = fov_degrees;
     const builds::BuildProfile& profile = builds::ActiveProfile();
+    builds::MotionBlurDiscovery discovered;
+    std::string discovery_error;
+    if (!builds::DiscoverMotionBlurInModule(GetModuleHandleW(nullptr), discovered, discovery_error)) {
+        Log::Line("[camera] motion-blur discovery rejected: %s", discovery_error.c_str());
+        return false;
+    }
+    const struct { const char* name; unsigned int found; unsigned int expected; } checks[] = {
+        {"player camera getter", discovered.player_camera_getter, profile.Offsets.player_camera_getter_rva},
+        {"view rays", discovered.view_rays, profile.Offsets.camera_view_rays_rva},
+        {"motion-blur caller", discovered.motion_blur_return, profile.Offsets.motion_blur_rays_return_rva},
+        {"matrix inverse", discovered.inverse, profile.Offsets.matrix_inverse_rva},
+        {"inverse-view field", discovered.inverse_view, profile.Offsets.render_inverse_view},
+        {"vertical-FOV field", discovered.vertical_fov, profile.Offsets.render_vertical_fov},
+    };
+    for (const auto& check : checks) {
+        if (check.found == check.expected) continue;
+        Log::Line("[camera] discovered %s=%08X disagrees with %s=%08X; no camera hooks installed",
+                  check.name, check.found, profile.Name, check.expected);
+        return false;
+    }
+    Log::Line("[camera] discovered motion-blur return=%08X, rays=%08X, player getter=%08X, "
+              "inverse=%08X, inverse field=%X, FOV=%X, aspect=%X; remaining dependencies use profile %s",
+              discovered.motion_blur_return, discovered.view_rays, discovered.player_camera_getter,
+              discovered.inverse, discovered.inverse_view, discovered.vertical_fov, discovered.aspect, profile.Name);
     g_module_base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
     g_frustum_frame_return = g_module_base + profile.Offsets.frustum_frame_return_rva;
     g_player_camera = reinterpret_cast<PlayerCameraGetterFn>(
-        g_module_base + profile.Offsets.player_camera_getter_rva);
+        g_module_base + discovered.player_camera_getter);
     g_matrix_inverse = reinterpret_cast<MatrixInverseFn>(
         g_module_base + profile.Offsets.matrix_inverse_rva);
     g_view_offset = profile.Offsets.render_view;
@@ -266,7 +291,7 @@ bool InstallCameraHook(float fov_degrees) {
     g_view_projection_offset = profile.Offsets.render_view_projection;
     g_inverse_view_offset = profile.Offsets.render_inverse_view;
     g_vertical_fov_offset = profile.Offsets.render_vertical_fov;
-    g_motion_blur_rays_return = g_module_base + profile.Offsets.motion_blur_rays_return_rva;
+    g_motion_blur_rays_return = g_module_base + discovered.motion_blur_return;
 
     const CameraHook camera_hooks[] = {
         {"hooking the vehicle camera update", profile.Offsets.drive_camera_update_rva,
@@ -278,7 +303,7 @@ bool InstallCameraHook(float fov_degrees) {
         {"hooking camera visibility", profile.Offsets.camera_frustum_rva,
          reinterpret_cast<void*>(&CameraFrustumDetour),
          reinterpret_cast<void**>(&g_original_camera_frustum)},
-        {"hooking view rays", profile.Offsets.camera_view_rays_rva,
+        {"hooking view rays", discovered.view_rays,
          reinterpret_cast<void*>(&ViewRaysDetour),
          reinterpret_cast<void**>(&g_original_view_rays)},
         {"hooking visibility bounds", profile.Offsets.camera_bounds_rva,

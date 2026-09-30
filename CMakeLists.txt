@@ -25,6 +25,10 @@ set(CAMERAUNLOCK_BUILD_HOOKS ON CACHE BOOL "" FORCE)
 set(CAMERAUNLOCK_BUILD_DISCOVERY ON CACHE BOOL "" FORCE)
 add_subdirectory(cameraunlock-core/cpp ${CMAKE_BINARY_DIR}/cameraunlock-core)
 
+add_library(sr_render_discovery STATIC src/builds/render_discovery.cpp src/builds/render_discovery_win.cpp)
+target_include_directories(sr_render_discovery PRIVATE src cameraunlock-core/vendor/minhook/src/hde)
+target_link_libraries(sr_render_discovery PUBLIC minhook cameraunlock psapi)
+
 set(MOD_SOURCES
     src/dllmain.cpp
     src/headtracking_mod.cpp
@@ -50,6 +54,7 @@ target_link_libraries(SnowRunnerHeadTracking PRIVATE
     cameraunlock
     cameraunlock_hooks
     cameraunlock_discovery
+    sr_render_discovery
     ws2_32
     psapi
 )
@@ -95,6 +100,9 @@ if(SR_BUILD_TESTS)
 
     sr_add_test(build_registry src/builds/steam_offsets.cpp src/builds/gdk_offsets.cpp)
     target_link_libraries(sr_build_registry_tests PRIVATE cameraunlock)
+
+    sr_add_test(render_discovery)
+    target_link_libraries(sr_render_discovery_tests PRIVATE sr_render_discovery)
 
     # The camera composition, compiled straight from the production translation
     # unit: axis signs, camera-local rotation, body-frame lean, and the numbers
