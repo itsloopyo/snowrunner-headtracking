@@ -8,11 +8,30 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
+#include <iterator>
+#include <vector>
 
 using namespace sr_ht::builds;
 using sr_test::Check;
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc == 2) {
+        std::ifstream stream(argv[1], std::ios::binary);
+        std::vector<std::uint8_t> mapped{std::istreambuf_iterator<char>(stream), {}};
+        if (!Check(mapped.size() >= 0x1000, "read mapped installed image"))
+            return sr_test::Summary("build_registry");
+        std::uint32_t pe = 0;
+        std::memcpy(&pe, mapped.data() + 0x3C, 4);
+        if (!Check(pe < mapped.size() - 0x100, "mapped PE header is bounded"))
+            return sr_test::Summary("build_registry");
+        Check(SelectProfile(mapped.data()) == ProfileSelection::Matched,
+              "installed image selects historical store profile");
+        mapped[pe + 24 + 64] ^= 0x80;
+        Check(SelectProfile(mapped.data()) == ProfileSelection::NoMatch && g_active == nullptr,
+              "real selection rejects unlisted copy of installed image and clears prior selection");
+        return sr_test::Summary("build_registry");
+    }
     std::array<std::uint8_t, 512> image{};
     const std::uint16_t mz = 0x5A4D;
     const std::uint32_t nt_offset = 0x80;

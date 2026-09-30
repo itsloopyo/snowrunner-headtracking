@@ -13,7 +13,7 @@ bool InitGameState();
 // True while a co-op session looks live.
 //
 // SnowRunner's own network session object is a netREDSTONE_SESSION, and the mod
-// detours every entry in that class's vtable it can. A call means a session
+// detours every distinct entry within that class's validated vtable boundary. A call means a session
 // object is running, and the gate stays shut for kSessionHoldSeconds after the
 // last one so a session that ticks unevenly cannot flicker the view.
 //
@@ -22,8 +22,7 @@ bool InitGameState();
 // a live co-op session, so "no calls" is being read as "no session" on the
 // strength of the single-player observation alone. Silence therefore leaves
 // tracking ON, and a session whose object is a derived class with its own
-// vtable, or whose ticking slot is one of the slots that failed to hook, would
-// be silent. InitGameState logs which slots it is watching for that reason.
+// vtable would be silent. A failed method hook rejects initialization.
 bool IsMultiplayerSessionLive();
 
 // Frees the session detours. Safe to call when InitGameState failed.

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(SnowRunnerHeadTracking VERSION 0.2.0 LANGUAGES C CXX)
+project(SnowRunnerHeadTracking VERSION 0.2.0 LANGUAGES C CXX ASM_MASM)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,7 +11,7 @@ if(WIN32)
 endif()
 
 if(MSVC)
-    add_compile_options(/permissive- /Zc:__cplusplus /MP /W4)
+    add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:/permissive-;/Zc:__cplusplus;/MP;/W4>")
 endif()
 
 # HOOKS carries hooks/hook_manager.cpp, the MinHook wrapper both the camera
@@ -37,6 +37,8 @@ set(MOD_SOURCES
     src/camera_hook.cpp
     src/camera_transform.cpp
     src/game_state.cpp
+    src/session_vtable.cpp
+    src/session_thunks.asm
     src/window_centering.cpp
     src/builds/build_registry.cpp
     src/builds/steam_offsets.cpp
@@ -110,7 +112,7 @@ if(SR_BUILD_TESTS)
     sr_add_test(camera_transform src/camera_transform.cpp)
 
     # The gate's classification, compiled from the production translation unit.
-    sr_add_test(game_state src/game_state.cpp)
+    sr_add_test(game_state src/game_state.cpp src/session_vtable.cpp src/session_thunks.asm)
     target_link_libraries(sr_game_state_tests PRIVATE cameraunlock cameraunlock_hooks
                           cameraunlock_discovery)
 
