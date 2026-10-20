@@ -12,6 +12,8 @@ namespace sr_ht::builds {
 // Append-only. Newest build first: the top entry is the diagnostic primary
 // that the "unknown build" log line compares against to say whether the
 // running EXE is newer or older than anything this mod knows about.
+extern const BuildProfile kGdkProfile_20260924;
+extern const BuildProfile kSteamProfile_20260924;
 extern const BuildProfile kGdkProfile_20260722;
 extern const BuildProfile kSteamProfile_20260722;
 

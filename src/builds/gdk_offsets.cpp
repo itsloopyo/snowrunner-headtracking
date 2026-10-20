@@ -49,4 +49,32 @@ extern const BuildProfile kGdkProfile_20260722 = {
     },
 };
 
+// Package 1.0.154.0, Content\SnowRunner.exe built 2026-09-24 14:30:56 UTC.
+// Carried from gdk-win64-20260722 against a dump of the running image the same
+// way, each function and call site a single hit. Startup discovery on this
+// image resolves the getter, rays, motion-blur call site, inverse and record
+// offsets to the same values, and the drive update is also vtable slot 4 of
+// combineDriveCameraAction.
+extern const BuildProfile kGdkProfile_20260924 = {
+    "gdk-win64-20260924",
+    { 0x6AB53420, 0x0272C000, 0x025EB136 },
+    {
+        /* drive_camera_update_rva     */ 0x004BBA60,
+        /* render_camera_upload_rva    */ 0x00A081E0,
+        /* camera_frustum_rva          */ 0x00A083B0,
+        /* camera_bounds_rva           */ 0x00A084B0,
+        /* camera_view_rays_rva        */ 0x00A08720,
+        /* motion_blur_rays_return_rva */ 0x00595E41,
+        /* player_camera_getter_rva    */ 0x005C1160,
+        /* matrix_inverse_rva          */ 0x00DECC90,
+        /* frustum_frame_return_rva    */ 0x00AAE8E9,
+        /* render_view                 */ 0x000,
+        /* render_projection           */ 0x040,
+        /* render_eye                  */ 0x0B0,
+        /* render_view_projection      */ 0x0C0,
+        /* render_inverse_view         */ 0x080,
+        /* render_vertical_fov         */ 0x108,
+    },
+};
+
 }  // namespace sr_ht::builds
