@@ -5,7 +5,6 @@
 
 #include "logging.h"
 
-using cameraunlock::memory::FingerprintMismatch;
 using cameraunlock::memory::PeFingerprint;
 
 namespace sr_ht::builds {
@@ -22,27 +21,12 @@ namespace {
 
 const BuildProfile* g_active = nullptr;
 
-// Says which side of the known builds the running EXE fell on, against the
-// diagnostic primary - the newest profile in the registry, which is why
-// kKnownProfiles is ordered newest first. This is the whole of what a user sees
-// when their build is unrecognised, so it has to name the direction rather than
-// just refusing.
-void LogUnknownBuild(const PeFingerprint& running) {
-    const BuildProfile& primary = *kKnownProfiles[0];
-    switch (cameraunlock::memory::ClassifyMismatch(running, primary.Fingerprint)) {
-    case FingerprintMismatch::Newer:
-        Log::Line("[build] this game build is NEWER than any build this mod knows about "
-                  "(newest known: %s). Check the mod's releases page for an update.", primary.Name);
-        break;
-    case FingerprintMismatch::Older:
-        Log::Line("[build] this game build is OLDER than any build this mod knows about "
-                  "(newest known: %s). Let the store finish updating the game.", primary.Name);
-        break;
-    case FingerprintMismatch::Differs:
-        Log::Line("[build] this EXE has a known build timestamp but a different size/checksum "
-                  "(repacked or modified binary). This mod will not engage on a modified EXE.");
-        break;
-    }
+// A TimeDateStamp is not a release date for this game, so the line does not
+// guess whether the running build is older or newer than the known ones.
+void LogUnknownBuild() {
+    Log::Line("[build] no profile matches this SnowRunner.exe (newest known: %s). If the "
+              "game updated recently, check the mod's releases page for an update.",
+              kKnownProfiles[0]->Name);
     Log::Line("[build] staying fully dormant: no hooks installed, the game runs vanilla.");
 }
 
@@ -78,7 +62,7 @@ ProfileSelection SelectProfile(void* moduleBase) {
         return ProfileSelection::Matched;
     }
 
-    LogUnknownBuild(running);
+    LogUnknownBuild();
     return ProfileSelection::NoMatch;
 }
 

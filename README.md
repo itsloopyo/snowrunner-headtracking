@@ -25,8 +25,8 @@ game: the exes built on 2026-07-22 and the ones built on 2026-09-24.
 Each store ships its own separately built exe, so the mod carries one entry per
 build and picks between them from the running exe's own PE header. A build it
 does not recognise - a patch it has not been updated for, or a store it has no
-entry for - gets no hooks at all: the game runs vanilla and the log says which
-way the mismatch went. Installing it on a copy it cannot help does not break
+entry for - gets no hooks at all: the game runs vanilla and the log says no
+profile matched. Installing it on a copy it cannot help does not break
 that copy.
 
 Where the files go differs between the two, because the two lay their folders
@@ -265,7 +265,7 @@ Read `HeadTracking.log`, next to `SnowRunner.exe`. It records the game folder, t
 **Mod not loading:**
 
 - No log file at all means the loader is not being picked up. Check that `dinput8.dll` and `SnowRunnerHeadTracking.asi` are both beside `SnowRunner.exe` - `Sources\Bin` on Steam, `Content` on Xbox Game Pass - and not in the folder above it.
-- If the log says the mod stayed dormant, your `SnowRunner.exe` is not a build this mod has a profile for. The mod fingerprints the running exe (TimeDateStamp, SizeOfImage and CheckSum) and installs no hooks unless it matches. The log line says whether your build is newer or older than the ones it knows; a newer one needs a mod update.
+- If the log says the mod stayed dormant, your `SnowRunner.exe` is not a build this mod has a profile for. The mod fingerprints the running exe (TimeDateStamp, SizeOfImage and CheckSum) and installs no hooks unless it matches. After a game update, a mod update that knows the new build is what brings it back.
 
 **No tracking response:**
 
