@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1] - 2026-10-20
+
+### Fixed
+
+- add Steam and Xbox profiles for the 2026-09-24 game build
+- stop guessing newer or older from the exe timestamp
+
 ## [0.3.0] - 2026-10-01
 
 ### Added
