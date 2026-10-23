@@ -1,6 +1,6 @@
 [workspace]
 name = "snowrunner-headtracking"
-version = "0.3.1"
+version = "0.3.2"
 description = "Head tracking mod for SnowRunner (Saber3D engine)"
 license = "MIT"
 license-file = "LICENSE"
