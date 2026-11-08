@@ -11,6 +11,7 @@ namespace sr_ht::builds {
 
 // Append-only. Newest build first: the top entry is the one the "unknown
 // build" log line names.
+extern const BuildProfile kSteamProfile_20261023;
 extern const BuildProfile kGdkProfile_20260924;
 extern const BuildProfile kSteamProfile_20260924;
 extern const BuildProfile kGdkProfile_20260722;

@@ -66,4 +66,32 @@ extern const BuildProfile kSteamProfile_20260924 = {
     },
 };
 
+// Steam build 26218478, Sources\Bin\SnowRunner.exe built 2026-10-23 16:07:03
+// UTC. Every function and call site was carried from steam-win64-20260924 by
+// its instruction bytes with relative displacements wildcarded, each a single
+// hit. Startup discovery on this image resolves the getter, rays, motion-blur
+// call site, inverse and record offsets to the same values, and the drive
+// update is also slot 4 of combineDriveCameraAction@combine's vtable.
+extern const BuildProfile kSteamProfile_20261023 = {
+    "steam-win64-20261023",
+    { 0x6ADB8627, 0x02E07000, 0x02CA649C },
+    {
+        /* drive_camera_update_rva     */ 0x00A184E0,
+        /* render_camera_upload_rva    */ 0x00DA43C0,
+        /* camera_frustum_rva          */ 0x00DA4590,
+        /* camera_bounds_rva           */ 0x00DA4690,
+        /* camera_view_rays_rva        */ 0x00DA4900,
+        /* motion_blur_rays_return_rva */ 0x00ABC711,
+        /* player_camera_getter_rva    */ 0x00AD7790,
+        /* matrix_inverse_rva          */ 0x01155210,
+        /* frustum_frame_return_rva    */ 0x00E0EF71,
+        /* render_view                 */ 0x000,
+        /* render_projection           */ 0x040,
+        /* render_eye                  */ 0x0B0,
+        /* render_view_projection      */ 0x0C0,
+        /* render_inverse_view         */ 0x080,
+        /* render_vertical_fov         */ 0x108,
+    },
+};
+
 }  // namespace sr_ht::builds
