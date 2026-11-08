@@ -19,8 +19,8 @@ An unofficial head tracking mod for SnowRunner that moves the camera with your h
 
 ### Which copies of the game this works on
 
-The Steam build with the exe built on 2026-07-22, 2026-09-24 or 2026-10-23,
-and the Xbox Game Pass build with the exe built on 2026-07-22 or 2026-09-24.
+The Steam build and the Xbox Game Pass build, each in three versions of the
+game: the exes built on 2026-07-22, on 2026-09-24 and on 2026-10-23.
 
 Each store ships its own separately built exe, so the mod carries one entry per
 build and picks between them from the running exe's own PE header. A build it
@@ -60,7 +60,7 @@ The installer puts two files next to `SnowRunner.exe`: `SnowRunnerHeadTracking.a
 
 `SnowRunner.exe` is not at the top of the Steam game folder - it lives in `Sources\Bin`, and that is where both files go. The Xbox Game Pass copy keeps it at the root of `Content` instead. The loader only ever looks in the directory the exe is in, so a copy anywhere else does nothing at all.
 
-Success looks like a `CameraUnlock.ini`, the mod's settings file, and a `HeadTracking.log` appearing beside `SnowRunner.exe` after the first launch, with the log reading `[build] activated profile steam-win64-20261023` (or `gdk-win64-20260924` on Xbox Game Pass) and a `[camera] hooked vehicle activity at ...` line.
+Success looks like a `CameraUnlock.ini`, the mod's settings file, and a `HeadTracking.log` appearing beside `SnowRunner.exe` after the first launch, with the log reading `[build] activated profile steam-win64-20261023` (or `gdk-win64-20261023` on Xbox Game Pass) and a `[camera] hooked vehicle activity at ...` line.
 
 If the installer cannot find your game, point it at the folder yourself, either with an environment variable:
 
