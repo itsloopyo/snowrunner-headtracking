@@ -7,6 +7,7 @@
 #include <intrin.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <mutex>
@@ -110,7 +111,10 @@ bool ShouldComposeCamera(std::uintptr_t caller, HeadPose& pose, bool& world_yaw)
     if (caller == g_frustum_frame_return) {
         // Visibility must decide the frame and capture the pose before any draw
         // uploads use them.
-        g_vehicle_gate.OnFrame();
+        g_vehicle_gate.OnFrame(static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now().time_since_epoch())
+                .count()));
         g_aim_gate.OnFrame();
         if (g_vehicle_gate.Active() && (!g_logged_aim_state || g_aim_gate.Active() != g_aim_was_active)) {
             Log::Line(g_aim_gate.Active()
