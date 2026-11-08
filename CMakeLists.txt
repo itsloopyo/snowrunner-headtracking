@@ -117,6 +117,9 @@ if(SR_BUILD_TESTS)
     # The shape the HUD camera refresh must have before the mod redirects it.
     sr_add_test(ui_camera)
 
+    # Which frames the vehicle camera aimed, so the map is never composed.
+    sr_add_test(player_camera_aim)
+
     # The gate's classification, compiled from the production translation unit.
     sr_add_test(game_state src/game_state.cpp src/session_vtable.cpp src/session_thunks.asm)
     target_link_libraries(sr_game_state_tests PRIVATE cameraunlock cameraunlock_hooks

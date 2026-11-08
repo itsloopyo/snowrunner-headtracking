@@ -40,6 +40,11 @@ struct OffsetTable {
     // the main loop copies each frame, at ui_camera_record in the object.
     unsigned int ui_camera_refresh_rva;
 
+    // The render record's LookAt. The vehicle camera aims the player's record
+    // through it once per drawn frame; the map, which draws through the same
+    // record, never does.
+    unsigned int render_camera_look_at_rva;
+
     // Byte offsets in the render-camera source record. The view is row-major;
     // its first three columns are world-space right, up and forward, and the
     // cached matrix is view * projection.
@@ -74,6 +79,7 @@ inline bool IsProfileComplete(const BuildProfile& p) {
         && p.Offsets.frustum_frame_return_rva != 0
         && p.Offsets.render_camera_upload_alt_rva != 0
         && p.Offsets.ui_camera_refresh_rva != 0
+        && p.Offsets.render_camera_look_at_rva != 0
         && p.Offsets.render_projection != 0
         && p.Offsets.render_eye != 0
         && p.Offsets.render_view_projection != 0

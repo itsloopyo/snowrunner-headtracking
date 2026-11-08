@@ -17,6 +17,7 @@
 #include "camera_transform.h"
 #include "headtracking_mod.h"
 #include "logging.h"
+#include "player_camera_aim.h"
 #include "ui_camera.h"
 #include "vehicle_camera_gate.h"
 
@@ -35,6 +36,7 @@ using ViewRaysFn = void(__fastcall*)(void*, void*);
 using BoundsFn = void(__fastcall*)(void*, void*, void*, float);
 using RenderCameraUploadAltFn = void(__fastcall*)(void*, void*, void*);
 using UiCameraRefreshFn = void(__fastcall*)(void*);
+using LookAtFn = void(__fastcall*)(void*, const float*, const float*, const float*);
 
 DriveCameraUpdateFn g_original_drive_camera_update = nullptr;
 RenderCameraUploadFn g_original_render_camera_upload = nullptr;
@@ -45,6 +47,7 @@ ViewRaysFn g_original_view_rays = nullptr;
 BoundsFn g_original_bounds = nullptr;
 RenderCameraUploadAltFn g_original_render_camera_upload_alt = nullptr;
 UiCameraRefreshFn g_original_ui_camera_refresh = nullptr;
+LookAtFn g_original_look_at = nullptr;
 
 std::uintptr_t g_module_base = 0;
 std::uintptr_t g_frustum_frame_return = 0;
@@ -66,6 +69,9 @@ std::atomic<unsigned> g_ui_camera_next{0};
 
 std::atomic<bool> g_logged_drive_camera_activity{false};
 VehicleCameraGate g_vehicle_gate;
+PlayerCameraAimGate g_aim_gate;
+bool g_logged_aim_state = false;
+bool g_aim_was_active = false;
 
 // CameraUnlock.ini's Fov, the angle the frame should span across its width. Written once
 // by InstallCameraHook before the first detour exists, so the render threads
@@ -77,6 +83,11 @@ HeadPose g_render_pose;
 bool g_have_render_pose = false;
 bool g_render_world_yaw = false;
 
+void __fastcall LookAtDetour(void* record, const float* eye, const float* target, const float* up) {
+    g_original_look_at(record, eye, target, up);
+    if (record == g_player_camera()) g_aim_gate.OnAim();
+}
+
 void __fastcall DriveCameraUpdateDetour(void* camera, void* frame) {
     g_original_drive_camera_update(camera, frame);
     g_vehicle_gate.OnDriveUpdate();
@@ -85,23 +96,34 @@ void __fastcall DriveCameraUpdateDetour(void* camera, void* frame) {
     }
 }
 
+bool DrawingVehicleCamera() { return g_vehicle_gate.Active() && g_aim_gate.Active(); }
+
 // This frame's head pose, and whether the camera has to be composed at all.
 //
 // A frame with no pose still composes while Fov is set: the field of view
 // is a rendering setting rather than head tracking, so it survives the toggle
 // hotkey, a tracker that has stopped sending and the co-op gate - all three of
-// which only decide whether a pose exists. Both stop where VehicleCameraGate
-// does, at a menu or a loading screen.
+// which only decide whether a pose exists. Both stop wherever the player view
+// is not the vehicle camera's: a menu, a loading screen, the map.
 bool ShouldComposeCamera(std::uintptr_t caller, HeadPose& pose, bool& world_yaw) {
     std::lock_guard<std::mutex> lock(g_pose_mutex);
     if (caller == g_frustum_frame_return) {
         // Visibility must decide the frame and capture the pose before any draw
         // uploads use them.
         g_vehicle_gate.OnFrame();
-        g_have_render_pose = g_vehicle_gate.Active() && PoseForThisFrame(g_render_pose);
+        g_aim_gate.OnFrame();
+        if (g_vehicle_gate.Active() && (!g_logged_aim_state || g_aim_gate.Active() != g_aim_was_active)) {
+            Log::Line(g_aim_gate.Active()
+                          ? "[camera] the vehicle camera is drawing the player view"
+                          : "[camera] the player view is drawn by a camera other than the vehicle camera, "
+                            "such as the map's: nothing is composed into it");
+            g_logged_aim_state = true;
+            g_aim_was_active = g_aim_gate.Active();
+        }
+        g_have_render_pose = DrawingVehicleCamera() && PoseForThisFrame(g_render_pose);
         g_render_world_yaw = WorldYawEnabled();
     }
-    if (!g_vehicle_gate.Active()) return false;
+    if (!DrawingVehicleCamera()) return false;
     if (!g_have_render_pose) return g_fov_degrees > 0.0f;
     pose = g_render_pose;
     world_yaw = g_render_world_yaw;
@@ -349,6 +371,12 @@ bool InstallCameraHook(float fov_degrees) {
         Log::Line("[camera] %s (profile %s); no camera hooks installed", ui_camera_error.c_str(), profile.Name);
         return false;
     }
+    std::string look_at_error;
+    if (!CheckLookAt(reinterpret_cast<const std::uint8_t*>(g_module_base + profile.Offsets.render_camera_look_at_rva),
+                     look_at_error)) {
+        Log::Line("[camera] %s (profile %s); no camera hooks installed", look_at_error.c_str(), profile.Name);
+        return false;
+    }
 
     const CameraHook camera_hooks[] = {
         {"hooking the vehicle camera update", profile.Offsets.drive_camera_update_rva,
@@ -372,6 +400,9 @@ bool InstallCameraHook(float fov_degrees) {
         {"hooking the HUD camera", profile.Offsets.ui_camera_refresh_rva,
          reinterpret_cast<void*>(&UiCameraRefreshDetour),
          reinterpret_cast<void**>(&g_original_ui_camera_refresh)},
+        {"hooking the render camera LookAt", profile.Offsets.render_camera_look_at_rva,
+         reinterpret_cast<void*>(&LookAtDetour),
+         reinterpret_cast<void**>(&g_original_look_at)},
     };
     constexpr std::size_t kHookCount = sizeof(camera_hooks) / sizeof(camera_hooks[0]);
     void* targets[kHookCount]{};
@@ -408,8 +439,8 @@ bool InstallCameraHook(float fov_degrees) {
     }
 
     Log::Line("[camera] hooked vehicle activity at 0x%p, player render uploads at 0x%p and 0x%p, "
-              "visibility at 0x%p, view rays at 0x%p, bounds at 0x%p, HUD camera at 0x%p (profile %s)",
-              targets[0], targets[1], targets[5], targets[2], targets[3], targets[4], targets[6],
+              "visibility at 0x%p, view rays at 0x%p, bounds at 0x%p, HUD camera at 0x%p, LookAt at 0x%p (profile %s)",
+              targets[0], targets[1], targets[5], targets[2], targets[3], targets[4], targets[6], targets[7],
               profile.Name);
     return true;
 }
