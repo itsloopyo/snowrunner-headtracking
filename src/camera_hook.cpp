@@ -17,6 +17,8 @@
 #include "camera_transform.h"
 #include "headtracking_mod.h"
 #include "logging.h"
+#include "ui_camera.h"
+#include "vehicle_camera_gate.h"
 
 #include "cameraunlock/hooks/hook_manager.h"
 
@@ -31,6 +33,8 @@ using PlayerCameraGetterFn = void*(__fastcall*)();
 using MatrixInverseFn = void(__fastcall*)(void*, int, void*);
 using ViewRaysFn = void(__fastcall*)(void*, void*);
 using BoundsFn = void(__fastcall*)(void*, void*, void*, float);
+using RenderCameraUploadAltFn = void(__fastcall*)(void*, void*, void*);
+using UiCameraRefreshFn = void(__fastcall*)(void*);
 
 DriveCameraUpdateFn g_original_drive_camera_update = nullptr;
 RenderCameraUploadFn g_original_render_camera_upload = nullptr;
@@ -39,6 +43,8 @@ PlayerCameraGetterFn g_player_camera = nullptr;
 MatrixInverseFn g_matrix_inverse = nullptr;
 ViewRaysFn g_original_view_rays = nullptr;
 BoundsFn g_original_bounds = nullptr;
+RenderCameraUploadAltFn g_original_render_camera_upload_alt = nullptr;
+UiCameraRefreshFn g_original_ui_camera_refresh = nullptr;
 
 std::uintptr_t g_module_base = 0;
 std::uintptr_t g_frustum_frame_return = 0;
@@ -50,10 +56,16 @@ unsigned g_inverse_view_offset = 0;
 unsigned g_vertical_fov_offset = 0;
 std::uintptr_t g_motion_blur_rays_return = 0;
 constexpr unsigned kRenderCameraBytes = 0x134;
+unsigned g_ui_camera_record = 0;
 
-std::atomic<unsigned long long> g_last_drive_camera_tick{0};
+// The HUD's camera, handed to ui3D_CAMERA_MR in place of the game's snapshot.
+// Two, written alternately, so a projection still running from last frame's
+// refresh never reads one being rewritten.
+alignas(16) std::uint8_t g_ui_cameras[2][kRenderCameraBytes];
+std::atomic<unsigned> g_ui_camera_next{0};
+
 std::atomic<bool> g_logged_drive_camera_activity{false};
-constexpr unsigned long long kVehicleCameraActivityMs = 100;
+VehicleCameraGate g_vehicle_gate;
 
 // CameraUnlock.ini's Fov, the angle the frame should span across its width. Written once
 // by InstallCameraHook before the first detour exists, so the render threads
@@ -67,15 +79,10 @@ bool g_render_world_yaw = false;
 
 void __fastcall DriveCameraUpdateDetour(void* camera, void* frame) {
     g_original_drive_camera_update(camera, frame);
-    g_last_drive_camera_tick.store(GetTickCount64(), std::memory_order_release);
+    g_vehicle_gate.OnDriveUpdate();
     if (!g_logged_drive_camera_activity.exchange(true, std::memory_order_relaxed)) {
         Log::Line("[camera] drive camera active");
     }
-}
-
-bool VehicleCameraIsActive() {
-    const unsigned long long last = g_last_drive_camera_tick.load(std::memory_order_acquire);
-    return last != 0 && GetTickCount64() - last <= kVehicleCameraActivityMs;
 }
 
 // This frame's head pose, and whether the camera has to be composed at all.
@@ -83,19 +90,18 @@ bool VehicleCameraIsActive() {
 // A frame with no pose still composes while Fov is set: the field of view
 // is a rendering setting rather than head tracking, so it survives the toggle
 // hotkey, a tracker that has stopped sending and the co-op gate - all three of
-// which only decide whether a pose exists. Both stop at the same place, a frame
-// no vehicle camera has drawn for 100ms, which is a menu or a loading screen.
+// which only decide whether a pose exists. Both stop where VehicleCameraGate
+// does, at a menu or a loading screen.
 bool ShouldComposeCamera(std::uintptr_t caller, HeadPose& pose, bool& world_yaw) {
     std::lock_guard<std::mutex> lock(g_pose_mutex);
-    if (!VehicleCameraIsActive()) {
-        g_have_render_pose = false;
-        return false;
-    }
     if (caller == g_frustum_frame_return) {
-        // Visibility must capture the pose before any draw uploads use it.
-        g_have_render_pose = PoseForThisFrame(g_render_pose);
+        // Visibility must decide the frame and capture the pose before any draw
+        // uploads use them.
+        g_vehicle_gate.OnFrame();
+        g_have_render_pose = g_vehicle_gate.Active() && PoseForThisFrame(g_render_pose);
         g_render_world_yaw = WorldYawEnabled();
     }
+    if (!g_vehicle_gate.Active()) return false;
     if (!g_have_render_pose) return g_fov_degrees > 0.0f;
     pose = g_render_pose;
     world_yaw = g_render_world_yaw;
@@ -192,6 +198,47 @@ void __fastcall RenderCameraUploadDetour(void* camera_data, void* context,
     std::memcpy(tracked, camera_data, sizeof(tracked));
     ComposeRenderCamera(tracked, pose, world_yaw);
     g_original_render_camera_upload(tracked, context, bindings, pass);
+}
+
+// The main draw renders a list of extra views, and after each one re-uploads
+// the player's camera through this second uploader. Left alone, every pass after
+// it is drawn from the clean camera until the next upload, a frame that jumps
+// back to where the head is not, on exactly the frames that render such a view.
+void __fastcall RenderCameraUploadAltDetour(void* camera_data, void* holder, void* context) {
+    const std::uintptr_t caller = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    if (camera_data != g_player_camera()) {
+        g_original_render_camera_upload_alt(camera_data, holder, context);
+        return;
+    }
+    HeadPose pose;
+    bool world_yaw = false;
+    if (!ShouldComposeCamera(caller, pose, world_yaw)) {
+        g_original_render_camera_upload_alt(camera_data, holder, context);
+        return;
+    }
+    alignas(16) std::uint8_t tracked[kRenderCameraBytes];
+    std::memcpy(tracked, camera_data, sizeof(tracked));
+    ComposeRenderCamera(tracked, pose, world_yaw);
+    g_original_render_camera_upload_alt(tracked, holder, context);
+}
+
+// World markers are placed by projecting through the record this stores, so
+// the HUD gets the camera the frame is drawn with, head pose and Fov included,
+// while the game's own snapshot is left as it built it.
+void __fastcall UiCameraRefreshDetour(void* ui_camera) {
+    g_original_ui_camera_refresh(ui_camera);
+    auto* const stored = reinterpret_cast<std::uint8_t**>(
+        static_cast<std::uint8_t*>(ui_camera) + g_ui_camera_record);
+    const std::uint8_t* const snapshot = *stored;
+    if (snapshot == nullptr) return;
+    HeadPose pose;
+    bool world_yaw = false;
+    if (!ShouldComposeCamera(0, pose, world_yaw)) return;
+    std::uint8_t* const tracked =
+        g_ui_cameras[g_ui_camera_next.fetch_xor(1, std::memory_order_relaxed)];
+    std::memcpy(tracked, snapshot, kRenderCameraBytes);
+    ComposeRenderCamera(tracked, pose, world_yaw);
+    *stored = tracked;
 }
 
 void __fastcall ViewRaysDetour(void* camera, void* output) {
@@ -292,6 +339,16 @@ bool InstallCameraHook(float fov_degrees) {
     g_inverse_view_offset = profile.Offsets.render_inverse_view;
     g_vertical_fov_offset = profile.Offsets.render_vertical_fov;
     g_motion_blur_rays_return = g_module_base + discovered.motion_blur_return;
+    g_ui_camera_record = profile.Offsets.ui_camera_record;
+
+    std::string ui_camera_error;
+    if (!CheckUiCameraRefresh(
+            reinterpret_cast<const std::uint8_t*>(g_module_base + profile.Offsets.ui_camera_refresh_rva),
+            reinterpret_cast<const std::uint8_t*>(g_module_base + discovered.player_camera_getter),
+            g_ui_camera_record, ui_camera_error)) {
+        Log::Line("[camera] %s (profile %s); no camera hooks installed", ui_camera_error.c_str(), profile.Name);
+        return false;
+    }
 
     const CameraHook camera_hooks[] = {
         {"hooking the vehicle camera update", profile.Offsets.drive_camera_update_rva,
@@ -309,6 +366,12 @@ bool InstallCameraHook(float fov_degrees) {
         {"hooking visibility bounds", profile.Offsets.camera_bounds_rva,
          reinterpret_cast<void*>(&BoundsDetour),
          reinterpret_cast<void**>(&g_original_bounds)},
+        {"hooking the second render camera upload", profile.Offsets.render_camera_upload_alt_rva,
+         reinterpret_cast<void*>(&RenderCameraUploadAltDetour),
+         reinterpret_cast<void**>(&g_original_render_camera_upload_alt)},
+        {"hooking the HUD camera", profile.Offsets.ui_camera_refresh_rva,
+         reinterpret_cast<void*>(&UiCameraRefreshDetour),
+         reinterpret_cast<void**>(&g_original_ui_camera_refresh)},
     };
     constexpr std::size_t kHookCount = sizeof(camera_hooks) / sizeof(camera_hooks[0]);
     void* targets[kHookCount]{};
@@ -335,7 +398,7 @@ bool InstallCameraHook(float fov_degrees) {
         targets[i] = target;
     }
 
-    // One thread freeze for all five; the co-op gate's hooks are already live and
+    // One thread freeze for all of them; the co-op gate's hooks are already live and
     // MinHook skips them. Disabled rather than removed on failure: a partial
     // enable can leave a thread inside a detour, and disabling keeps its
     // trampoline valid.
@@ -344,9 +407,10 @@ bool InstallCameraHook(float fov_degrees) {
         return false;
     }
 
-    Log::Line("[camera] hooked vehicle activity at 0x%p, player render upload at 0x%p "
-              "and visibility at 0x%p, view rays at 0x%p, bounds at 0x%p (profile %s)",
-              targets[0], targets[1], targets[2], targets[3], targets[4], profile.Name);
+    Log::Line("[camera] hooked vehicle activity at 0x%p, player render uploads at 0x%p and 0x%p, "
+              "visibility at 0x%p, view rays at 0x%p, bounds at 0x%p, HUD camera at 0x%p (profile %s)",
+              targets[0], targets[1], targets[5], targets[2], targets[3], targets[4], targets[6],
+              profile.Name);
     return true;
 }
 

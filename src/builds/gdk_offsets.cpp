@@ -40,12 +40,15 @@ extern const BuildProfile kGdkProfile_20260722 = {
         /* player_camera_getter_rva    */ 0x005C1060,
         /* matrix_inverse_rva          */ 0x00DEB280,
         /* frustum_frame_return_rva    */ 0x00AAD0E9,
+        /* render_camera_upload_alt_rva */ 0x00A06860,
+        /* ui_camera_refresh_rva       */ 0x00674E50,
         /* render_view                 */ 0x000,
         /* render_projection           */ 0x040,
         /* render_eye                  */ 0x0B0,
         /* render_view_projection      */ 0x0C0,
         /* render_inverse_view         */ 0x080,
         /* render_vertical_fov         */ 0x108,
+        /* ui_camera_record            */ 0x018,
     },
 };
 
@@ -68,12 +71,15 @@ extern const BuildProfile kGdkProfile_20260924 = {
         /* player_camera_getter_rva    */ 0x005C1160,
         /* matrix_inverse_rva          */ 0x00DECC90,
         /* frustum_frame_return_rva    */ 0x00AAE8E9,
+        /* render_camera_upload_alt_rva */ 0x00A08060,
+        /* ui_camera_refresh_rva       */ 0x00676530,
         /* render_view                 */ 0x000,
         /* render_projection           */ 0x040,
         /* render_eye                  */ 0x0B0,
         /* render_view_projection      */ 0x0C0,
         /* render_inverse_view         */ 0x080,
         /* render_vertical_fov         */ 0x108,
+        /* ui_camera_record            */ 0x018,
     },
 };
 
@@ -96,12 +102,15 @@ extern const BuildProfile kGdkProfile_20261023 = {
         /* player_camera_getter_rva    */ 0x005C1160,
         /* matrix_inverse_rva          */ 0x00DECC90,
         /* frustum_frame_return_rva    */ 0x00AAE8E9,
+        /* render_camera_upload_alt_rva */ 0x00A08060,
+        /* ui_camera_refresh_rva       */ 0x00676530,
         /* render_view                 */ 0x000,
         /* render_projection           */ 0x040,
         /* render_eye                  */ 0x0B0,
         /* render_view_projection      */ 0x0C0,
         /* render_inverse_view         */ 0x080,
         /* render_vertical_fov         */ 0x108,
+        /* ui_camera_record            */ 0x018,
     },
 };
 

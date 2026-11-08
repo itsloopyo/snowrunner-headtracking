@@ -29,12 +29,15 @@ extern const BuildProfile kSteamProfile_20260722 = {
         /* player_camera_getter_rva    */ 0x00AD5EF0,
         /* matrix_inverse_rva          */ 0x01153480,
         /* frustum_frame_return_rva    */ 0x00E0D9E1,
+        /* render_camera_upload_alt_rva */ 0x00DA2BC0,
+        /* ui_camera_refresh_rva       */ 0x008FF5E0,
         /* render_view                 */ 0x000,
         /* render_projection           */ 0x040,
         /* render_eye                  */ 0x0B0,
         /* render_view_projection      */ 0x0C0,
         /* render_inverse_view         */ 0x080,
         /* render_vertical_fov         */ 0x108,
+        /* ui_camera_record            */ 0x018,
     },
 };
 
@@ -57,12 +60,15 @@ extern const BuildProfile kSteamProfile_20260924 = {
         /* player_camera_getter_rva    */ 0x00AD7820,
         /* matrix_inverse_rva          */ 0x011551E0,
         /* frustum_frame_return_rva    */ 0x00E0F001,
+        /* render_camera_upload_alt_rva */ 0x00DA42D0,
+        /* ui_camera_refresh_rva       */ 0x008FFBC0,
         /* render_view                 */ 0x000,
         /* render_projection           */ 0x040,
         /* render_eye                  */ 0x0B0,
         /* render_view_projection      */ 0x0C0,
         /* render_inverse_view         */ 0x080,
         /* render_vertical_fov         */ 0x108,
+        /* ui_camera_record            */ 0x018,
     },
 };
 
@@ -85,12 +91,15 @@ extern const BuildProfile kSteamProfile_20261023 = {
         /* player_camera_getter_rva    */ 0x00AD7790,
         /* matrix_inverse_rva          */ 0x01155210,
         /* frustum_frame_return_rva    */ 0x00E0EF71,
+        /* render_camera_upload_alt_rva */ 0x00DA4240,
+        /* ui_camera_refresh_rva       */ 0x008FFB30,
         /* render_view                 */ 0x000,
         /* render_projection           */ 0x040,
         /* render_eye                  */ 0x0B0,
         /* render_view_projection      */ 0x0C0,
         /* render_inverse_view         */ 0x080,
         /* render_vertical_fov         */ 0x108,
+        /* ui_camera_record            */ 0x018,
     },
 };
 

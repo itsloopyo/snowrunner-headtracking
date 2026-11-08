@@ -111,6 +111,12 @@ if(SR_BUILD_TESTS)
     # the running game was measured producing.
     sr_add_test(camera_transform src/camera_transform.cpp)
 
+    # Which frames are drawn from a vehicle camera, counted in frames.
+    sr_add_test(vehicle_camera_gate)
+
+    # The shape the HUD camera refresh must have before the mod redirects it.
+    sr_add_test(ui_camera)
+
     # The gate's classification, compiled from the production translation unit.
     sr_add_test(game_state src/game_state.cpp src/session_vtable.cpp src/session_thunks.asm)
     target_link_libraries(sr_game_state_tests PRIVATE cameraunlock cameraunlock_hooks
