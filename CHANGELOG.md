@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.3] - 2026-11-08
+
+### Fixed
+
+- add a Steam profile for the 2026-10-23 game build
+- add an Xbox profile for the 2026-10-23 game build
+- stop the view snapping back to the untracked camera on slow frames and extra views, and project HUD markers through the tracked camera
+
 ## [0.3.2] - 2026-10-23
 
 ### Changed

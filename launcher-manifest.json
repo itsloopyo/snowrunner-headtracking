@@ -2,7 +2,7 @@
   "schema_version": 2,
   "mod_info": {
     "name": "SnowRunnerHeadTracking",
-    "version": "0.3.2",
+    "version": "0.3.3",
     "game_id": "snowrunner"
   },
   "strategy": "AsiLoader",
