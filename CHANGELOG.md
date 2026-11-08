@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4] - 2026-11-08
+
+### Fixed
+
+- keep head tracking off the map view so its route and markers line up
+- stop a quarter of frames above 120 fps being drawn from the untracked camera
+
 ## [0.3.3] - 2026-11-08
 
 ### Fixed
